@@ -25,6 +25,20 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 34. 
 | Audio input | Local IIDX 24 SINOBUZ `data/sound/system/0` directory and the supported IIDX 34 installation |
 | Python | Not required for the release ZIP; required when building from source |
 
+### Supported DLL game versions
+
+**beatmania IIDX 34 ZINRAI**
+
+- `2026091600`
+
+### Supported audio resource versions
+
+**beatmania IIDX 24 SINOBUZ**
+
+- `2017082800`
+
+The resource version identifies the tested source installation. The importer validates the required files and audio layout rather than enforcing that version string. Other game builds and resource revisions are not currently listed as supported.
+
 Supported `modules/bm2dx.dll` SHA-256:
 
 ```text

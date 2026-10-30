@@ -25,6 +25,20 @@
 | 音频来源 | 本地 IIDX 24 SINOBUZ `data/sound/system/0` 目录及受支持的 IIDX 34 安装 |
 | Python | 使用 Release 压缩包无需安装；从源码构建时需要 |
 
+### DLL 支持的游戏版本
+
+**beatmania IIDX 34 ZINRAI**
+
+- `2026091600`
+
+### 支持的音频资源版本
+
+**beatmania IIDX 24 SINOBUZ**
+
+- `2017082800`
+
+资源版本对应已验证的来源安装。导入工具检查所需文件和音频格式，不强制校验该版本字符串。其他游戏构建及资源修订版暂不列为支持。
+
 受支持的 `modules/bm2dx.dll` SHA-256：
 
 ```text
