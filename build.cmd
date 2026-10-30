@@ -17,6 +17,8 @@ cl /nologo /std:c++17 /utf-8 /W4 /WX /O2 /MT /EHsc /Iinclude tests\test_core.cpp
 if errorlevel 1 exit /b 1
 build\bgm-tests.exe
 if errorlevel 1 exit /b 1
+cl /nologo /std:c++17 /utf-8 /W4 /WX /O2 /MT /EHsc /Iinclude tests\test_host_image.cpp build\buffer.obj build\hook.obj build\trampoline.obj build\hde64.obj /Fo:build\test_host_image.obj /Fe:build\host-image-tests.exe /link /INCREMENTAL:NO
+if errorlevel 1 exit /b 1
 cl /nologo /std:c++17 /utf-8 /W4 /WX /O2 /MT /EHsc tools\audio_codec.cpp /Fo:build\audio_codec.obj /Fe:build\audio_codec.exe /link msacm32.lib /INCREMENTAL:NO
 if errorlevel 1 exit /b 1
 cl /nologo /std:c++17 /utf-8 /W4 /WX /O2 /MT /EHsc tools\loudness_meter.cpp /Fo:build\loudness_meter.obj /Fe:build\loudness_meter.exe /link /INCREMENTAL:NO

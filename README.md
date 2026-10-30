@@ -2,13 +2,14 @@
 
 [简体中文](README.zh-CN.md) · [Downloads](https://github.com/Tsurumaki-Kokoro/iidx-bgm-bridge/releases) · [Developer guide](docs/development.md)
 
-A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 34. The included SINOBUZ profile selects one of seven daily arrangements and keeps its three stems synchronized across menu transitions.
+A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 33 and 34. The included SINOBUZ profile selects one of seven daily arrangements and keeps its three stems synchronized across menu transitions.
 
-**No game executables or audio are included.** Generate runtime audio locally from your own IIDX 24 and supported IIDX 34 files. The importer does not download game data.
+**No game executables or audio are included.** Generate runtime audio locally from your own IIDX 24 or 33 audio and a supported IIDX 33/34 installation. The importer does not download game data.
 
 ## Features
 
 - Seven daily SINOBUZ arrangements, or a fixed weekday selection.
+- Sparkle Shower audio with its original selection intro and loop boundaries.
 - Continuous three-stem playback with configurable stage levels and fades.
 - Complete-mix compatibility profile for the original host scheduler.
 - Daily music-confirmation and card-out sounds, plus full mixes for alternate selection modes.
@@ -20,9 +21,9 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 34. 
 | Component | Requirement |
 | --- | --- |
 | OS | Windows x64 |
-| Host | IIDX 34 build identified as `iidx34-20260916` |
+| Host | Supported IIDX 33/34 builds listed below |
 | Loader | Spice2x with Spice SDK plugin support and the `-k` DLL option |
-| Audio input | Local IIDX 24 SINOBUZ `data/sound/system/0` directory and the supported IIDX 34 installation |
+| Audio input | IIDX 24 `data/sound/system/0` or IIDX 33 `data/sound/system`, plus the target installation |
 | Python | Not required for the release ZIP; required when building from source |
 
 ### Supported DLL game versions
@@ -31,27 +32,41 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 34. 
 
 - `2026091600`
 
+**beatmania IIDX 33 Sparkle Shower**
+
+- `2026081900`
+
 ### Supported audio resource versions
 
 **beatmania IIDX 24 SINOBUZ**
 
 - `2017082800`
 
+**beatmania IIDX 33 Sparkle Shower**
+
+- `2026081900`
+
 The resource version identifies the tested source installation. The importer validates the required files and audio layout rather than enforcing that version string. Other game builds and resource revisions are not currently listed as supported.
 
-Supported `modules/bm2dx.dll` SHA-256:
+Supported `modules/bm2dx.dll` SHA-256 (IIDX 34):
 
 ```text
 3755587f44785effe5008f74cfe7dccbdf423ad09feead48e00a90f78a42fe83
 ```
 
-Other executable revisions are rejected. Custom BGM and forced special states continue through the host's original logic. Offline tests cover playback, detours and resource generation; these do not establish compatibility with every game mode or replace listening tests in game. The transition follows the three-stem arrangement while retaining IIDX 34's volume updates; it is not an exact emulation of every IIDX 24 frame.
+IIDX 33 SHA-256:
+
+```text
+073493c6cf06fa4f0d197c60f9ffb9d70bf1ec52828018f1c06bdc24a27bb795
+```
+
+Other executable revisions are rejected. Custom BGM and forced special states continue through the host's original logic. Offline tests cover playback, detours and resource generation; these do not establish compatibility with every game mode or replace listening tests in game. The transition follows the three-stem arrangement while retaining the host's volume updates; it is not an exact emulation of every IIDX 24 frame.
 
 ## Install
 
-1. Close the game. Download and extract the Windows ZIP from [Releases](https://github.com/Tsurumaki-Kokoro/iidx-bgm-bridge/releases), then copy its contents into the IIDX 34 root directory. Do not use GitHub's source-code ZIP as the binary package.
+1. Close the game. Download and extract the Windows ZIP from [Releases](https://github.com/Tsurumaki-Kokoro/iidx-bgm-bridge/releases), then copy its contents into the target IIDX 33/34 root directory. Do not use GitHub's source-code ZIP as the binary package.
 2. Copy `modules/bgm_bridge.example.ini` to `modules/bgm_bridge.ini`. Updates ship an example file so your existing configuration is not overwritten.
-3. Run `tools/import-resources.exe`. Enter your IIDX 24 `data/sound/system/0` path and IIDX 34 root path when prompted. Importing may take a while. All seven days are prepared and validated before the resource set is installed.
+3. Run `tools/import-resources.exe`. Choose `sinobuz24` or `sparkle33`, then enter the audio source and target game root. For Sparkle Shower use IIDX 33’s `data/sound/system` directory. Importing may take a while. The selected resource set is fully prepared and validated before installation.
 4. Add `-k bgm_bridge.dll` to your existing Spice2x launch command, preserving its other options. For example, append that argument to the command you already use. The plugin DLL belongs in `modules/`.
 5. Start the game. Check `bgm_bridge.log` in the game root if the profile is not active.
 
@@ -61,7 +76,15 @@ For unattended local importing:
 tools\import-resources.exe --source-root "D:\IIDX24\data\sound\system\0" --game-root "D:\IIDX34"
 ```
 
-The generated files are placed under `data/sound/system/bgm_bridge/sinobuz24/`. Reimporting preserves the previous set in a sibling `sinobuz24.backup-*` directory. Use `--output-root` to generate a separate tree for inspection instead of installing the resources into the game directory. Close the game before importing.
+To import Sparkle Shower audio for either supported host:
+
+```bat
+tools\import-resources.exe --profile sparkle33 --source-root "D:\IIDX33\data\sound\system" --game-root "D:\IIDX34"
+```
+
+Then set `profile=sparkle33` and `fallback_profile=sparkle33` in the main INI. Importing generates resources without changing the selected profile.
+
+Generated files are placed under `data/sound/system/bgm_bridge/<profile>/`. Reimporting preserves the previous set in a sibling `<profile>.backup-*` directory. Use `--output-root` to generate a separate tree for inspection instead of installing the resources into the game directory. Close the game before importing.
 
 ## Configuration
 
@@ -79,10 +102,12 @@ smooth_transition=1
 | Setting | Values / behavior |
 | --- | --- |
 | `enabled` | `0` disables the plugin; `1` enables it |
-| `profile` | `sinobuz24` for synchronized stems; `sinobuz24_compat` for complete mixes |
+| `profile` | `sinobuz24` for synchronized stems; `sinobuz24_compat` for complete mixes; `sparkle33` for Sparkle Shower |
 | `fallback_profile` | Profile selected if the requested profile or its assets cannot load |
 | `weekday` | `auto`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
 | `smooth_transition` | `1` enables the selected controller; `0` selects fallback assets with original host scheduling |
+
+`sparkle33` preserves both source variants, selection intro and loop boundaries, using the original host scheduler rather than the SINOBUZ fade. Both audio families work with either supported host.
 
 The weekday is selected using the computer's local date and remains fixed until restart. Fade duration belongs to each profile's `[playback] transition_ms`, not the main INI. The default layered transition is 350 ms; the compatibility crossfade is 600 ms. Restart after configuration changes.
 
@@ -92,12 +117,12 @@ A missing profile or asset triggers fallback. If controller validation fails, th
 
 For updates, close the game, replace the DLL/tools/profiles, and keep your existing `bgm_bridge.ini`. Rerun the importer when resource generation or profile paths change. Keep the previous package if you need a rollback.
 
-To uninstall, remove the launch argument, then remove `modules/bgm_bridge.dll`, its INI/example, the two included profiles and the generated `data/sound/system/bgm_bridge/sinobuz24` directory. Remove importer tools only if no other installation needs them. Original game audio is not modified by this project.
+To uninstall, remove the launch argument, then remove `modules/bgm_bridge.dll`, its INI/example, the included profiles and the generated profile directories under `data/sound/system/bgm_bridge/`. Remove importer tools only if no other installation needs them. Original game audio is not modified by this project.
 
 ## Troubleshooting
 
 - **Original BGM still plays:** inspect `bgm_bridge.log`, confirm the `-k` argument and supported executable hash, and check that resource import completed.
-- **Importer cannot find a file:** choose IIDX 24's `data/sound/system/0`, not its game root. All seven sets of stems, card-out sounds and music-confirmation sounds are required. IIDX 34's original system files are also required.
+- **Importer cannot find a file:** for SINOBUZ choose IIDX 24's `data/sound/system/0`, with all seven days present. For Sparkle Shower choose IIDX 33's `data/sound/system`, including both variants. The target game's original system files are also required.
 - **Audio is too quiet or a transition sounds wrong:** report the weekday, profile, host hash, mode and a recording if possible. Include the generated `manifest.json` calibration values and relevant log lines; do not upload game audio files to an issue.
 - **Need the old scheduling behavior:** set `smooth_transition=0` and restart.
 

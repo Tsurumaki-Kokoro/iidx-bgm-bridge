@@ -1,4 +1,4 @@
-"""Create private runtime assets from local IIDX 24/34 files; never download audio."""
+"""Import private IIDX 24/33 audio for supported IIDX 33/34 hosts; no downloads."""
 import argparse
 import configparser
 import hashlib
@@ -11,12 +11,12 @@ import sys
 import tempfile
 from datetime import datetime
 import numpy as np
+from host_support import detect
 
 FROZEN = getattr(sys, 'frozen', False)
 ROOT = Path(sys.executable).resolve().parent.parent if FROZEN else Path(__file__).resolve().parents[1]
 BIN = ROOT/'tools' if FROZEN else ROOT/'build'
 DAYS = 'sun mon tue wed thu fri sat'.split()
-GAME_HASH = '3755587f44785effe5008f74cfe7dccbdf423ad09feead48e00a90f78a42fe83'
 ASSET_PATH = Path('data/sound/system/bgm_bridge/sinobuz24')
 
 def require(condition, message):
@@ -52,11 +52,13 @@ def patch(data, target, attenuation=None):
     if attenuation is not None: struct.pack_into('<h',result,18,attenuation)
     return result
 
-def check_assets(root, profiles):
+def check_assets(root, profiles, selected=None):
     count = 0
     for profile in sorted(profiles.glob('*.ini')):
+        if selected is not None and profile.stem not in selected:continue
         ini = configparser.ConfigParser(interpolation=None); ini.read(profile,encoding='utf-8')
-        for day in DAYS:
+        variants=DAYS if ini['profile'].get('schedule','weekday')=='weekday' else [ini['profile']['fixed_variant']]
+        for day in variants:
             for target in ini['map'].values():
                 virtual = target if target.startswith('/') else ini['profile']['resource_root']+'/'+target
                 path = root/virtual.replace('{day}',day).lstrip('/')
@@ -65,7 +67,7 @@ def check_assets(root, profiles):
 
 def prepare(source, game, output):
     source,game,output = source.resolve(),game.resolve(),output.resolve()
-    require(hashlib.sha256((game/'modules/bm2dx.dll').read_bytes()).hexdigest()==GAME_HASH,'Unsupported IIDX 34 build')
+    detect(game)
     for binary in ('audio_codec.exe','loudness_meter.exe'): require((BIN/binary).is_file(),f'Missing {binary}; build first')
     profiles = ROOT/'modules/bgm_profiles' if FROZEN else ROOT/'profiles'
     profile = configparser.ConfigParser(interpolation=None); profile.read(profiles/'sinobuz24_compat.ini',encoding='utf-8')
@@ -132,7 +134,7 @@ def prepare(source, game, output):
                     (compat/name).write_bytes(data)
                 reports.append(dict(day=day,variant=variant,attenuation=attenuation,reference_lufs=reference,selected_lufs=measure(actual,stage/'measure.pcm'),sample_peak=float(peak_for(quantized)),roundtrip_snr_db=float(snr),source_sha256=[hashlib.sha256(h).hexdigest() for h in headers]))
                 print(f'{day} / {variant}: ready',flush=True)
-        count=check_assets(stage,profiles)
+        count=check_assets(stage,profiles,{'sinobuz24','sinobuz24_compat'})
         files=[dict(path=p.relative_to(dest).as_posix(),sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in sorted(dest.rglob('*.sd9'))]
         (dest/'manifest.json').write_text(json.dumps(dict(schema=1,calibration=reports,files=files),indent=2)+'\n',encoding='utf-8')
         final=output/ASSET_PATH; final.parent.mkdir(parents=True,exist_ok=True)
@@ -145,18 +147,54 @@ def prepare(source, game, output):
             raise
         print(f'Imported {len(files)} files; validated {count} mappings. Output: {final}')
 
+def prepare_sparkle(source,game,output):
+    source,game,output=source.resolve(),game.resolve(),output.resolve()
+    family,build=detect(game)
+    if source.name=='0' and (source.parent/'1').is_dir():source=source.parent
+    profiles=ROOT/'modules/bgm_profiles' if FROZEN else ROOT/'profiles'
+    profile=configparser.ConfigParser(interpolation=None);profile.read(profiles/'sparkle33.ini',encoding='utf-8')
+    mappings=list(profile['map'])
+    # Validate both variants and every source before touching the installed set.
+    for route in mappings:
+        sd9(source/route);sd9(game/'data/sound/system'/route)
+    output.mkdir(parents=True,exist_ok=True)
+    asset_path=Path('data/sound/system/bgm_bridge/sparkle33')
+    with tempfile.TemporaryDirectory(prefix='bgm-bridge-',dir=output) as temporary:
+        stage=Path(temporary);dest=stage/asset_path/'default';records=[]
+        for route in mappings:
+            original=sd9(source/route);target=sd9(game/'data/sound/system'/route)
+            data=patch(original,target)
+            require(data[20:29]==original[20:29] and data[32:]==original[32:],'Loop/payload changed')
+            path=dest/route;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+            records.append(dict(path=route,source_sha256=hashlib.sha256(original).hexdigest(),sha256=hashlib.sha256(data).hexdigest()))
+        count=check_assets(stage,profiles,{'sparkle33'})
+        (dest.parent/'manifest.json').write_text(json.dumps(dict(schema=1,profile='sparkle33',host=family,host_version=build['version'],files=records),indent=2)+'\n',encoding='utf-8')
+        final=output/asset_path;final.parent.mkdir(parents=True,exist_ok=True);backup=None
+        if final.exists():
+            backup=final.with_name('sparkle33.backup-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f'));final.rename(backup)
+        try:shutil.move(str(dest.parent),str(final))
+        except Exception:
+            if backup is not None:backup.rename(final)
+            raise
+        print(f'Imported {len(records)} files; validated {count} mappings. Output: {final}')
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--source-root',type=Path,help='IIDX 24 data/sound/system/0 directory')
-    ap.add_argument('--game-root',type=Path,help='IIDX 34 root directory')
+    ap.add_argument('--profile',choices=['sinobuz24','sparkle33'],help='Audio profile (default: sinobuz24)')
+    ap.add_argument('--source-root',type=Path,help='IIDX 24 system/0 or IIDX 33 system directory')
+    ap.add_argument('--game-root',type=Path,help='Supported IIDX 33/34 root directory')
     ap.add_argument('--output-root',type=Path,help='Alternate output root (defaults to game root)')
     args=ap.parse_args(); interactive=args.source_root is None or args.game_root is None
     try:
-        source=args.source_root or Path(input('IIDX 24 data/sound/system/0: ').strip().strip('"'))
-        game=args.game_root or Path(input('IIDX 34 root: ').strip().strip('"'))
+        profile=args.profile or ((input('Audio profile [sinobuz24/sparkle33] (sinobuz24): ').strip() or 'sinobuz24') if interactive else 'sinobuz24')
+        require(profile in ('sinobuz24','sparkle33'),'Unknown audio profile')
+        prompt='IIDX 24 data/sound/system/0: ' if profile=='sinobuz24' else 'IIDX 33 data/sound/system: '
+        source=args.source_root or Path(input(prompt).strip().strip('"'))
+        game=args.game_root or Path(input('IIDX 33/34 root: ').strip().strip('"'))
         from deploy import process_names
         require(not process_names().intersection({'spice.exe','spice64.exe','bm2dx.exe'}),'Close the game before importing')
-        prepare(source,game,args.output_root or game)
+        if profile=='sinobuz24':prepare(source,game,args.output_root or game)
+        else:prepare_sparkle(source,game,args.output_root or game)
     except (OSError,ValueError,RuntimeError) as error:
         print(f'Import failed: {error}',file=sys.stderr)
         if interactive: input('Press Enter to close...')

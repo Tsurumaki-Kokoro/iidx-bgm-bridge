@@ -8,9 +8,9 @@ from pathlib import Path
 import shutil
 import struct
 from datetime import datetime
+from host_support import detect
 PROJECT = Path(__file__).resolve().parents[1]
 DAYS = 'sun mon tue wed thu fri sat'.split()
-GAME_HASH = '3755587f44785effe5008f74cfe7dccbdf423ad09feead48e00a90f78a42fe83'
 
 def process_names():
 
@@ -39,15 +39,19 @@ def process_names():
     finally:
         api.CloseHandle(handle)
 
-def validate(game, asset_root=None):
+def validate(game, asset_root=None, selected="sinobuz24"):
     asset_root = asset_root or game
-    if not hashlib.sha256((game / 'modules/bm2dx.dll').read_bytes()).hexdigest() == GAME_HASH:
-        raise ValueError('unsupported game build')
+    family, build = detect(game)
+    required = {'sinobuz24', 'sinobuz24_compat'} if selected == 'sinobuz24' else {selected}
+    if not (PROJECT/'profiles'/f'{selected}.ini').is_file(): raise ValueError('unknown profile')
     count = 0
     for profile in sorted((PROJECT / 'profiles').glob('*.ini')):
+        if profile.stem not in required: continue
         ini = configparser.ConfigParser(interpolation=None)
         ini.read(profile, encoding='utf-8')
-        for day in DAYS:
+        if family not in [item.strip() for item in ini['profile']['host'].split(',')]: raise ValueError('profile does not support host')
+        variants = DAYS if ini['profile'].get('schedule', 'weekday') == 'weekday' else [ini['profile']['fixed_variant']]
+        for day in variants:
             for source, target in ini['map'].items():
                 path = target if target.startswith('/') else ini['profile']['resource_root'] + '/' + target
                 asset = asset_root / path.replace('{day}', day).lstrip('/')
@@ -68,16 +72,19 @@ def validate(game, asset_root=None):
     if not library.spice_sdk_entry_point:
         raise ValueError('Validation failed')
     ctypes.windll.kernel32.FreeLibrary(ctypes.c_void_p(library._handle))
-    print(f'PASS: game hash, {count} mapped assets, 14 three-stem loop sets, DLL load/export')
+    print(f'PASS: {family} {build["version"]}, {count} mapped assets, loop validation, DLL load/export')
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--game-root', type=Path, required=True)
     ap.add_argument('--validate-only', action='store_true')
+    ap.add_argument('--profile', choices=['sinobuz24', 'sinobuz24_compat', 'sparkle33'])
     ap.add_argument('--asset-root', type=Path, help='Alternate asset tree for validation only')
     args = ap.parse_args()
     game = args.game_root.resolve()
-    validate(game, args.asset_root)
+    local = configparser.ConfigParser(); local.read(game/'modules/bgm_bridge.ini', encoding='utf-8-sig')
+    selected = args.profile or local.get('bgm_bridge', 'profile', fallback='sinobuz24')
+    validate(game, args.asset_root, selected)
     if args.validate_only:
         return
     if args.asset_root: raise ValueError("--asset-root requires --validate-only")
@@ -101,10 +108,10 @@ def main():
     ini.read(config, encoding='utf-8-sig')
     if not ini.has_section('bgm_bridge'):
         ini.add_section('bgm_bridge')
-    if 'profile' not in ini['bgm_bridge']:
-        ini['bgm_bridge']['profile'] = 'sinobuz24'
-    if 'fallback_profile' not in ini['bgm_bridge']:
-        ini['bgm_bridge']['fallback_profile'] = 'sinobuz24_compat'
+    if args.profile or 'profile' not in ini['bgm_bridge']:
+        ini['bgm_bridge']['profile'] = selected
+    if args.profile or 'fallback_profile' not in ini['bgm_bridge']:
+        ini['bgm_bridge']['fallback_profile'] = 'sinobuz24_compat' if selected == 'sinobuz24' else selected
     for key, value in [('enabled', '1'), ('weekday', 'auto'), ('smooth_transition', '1')]:
         if key not in ini['bgm_bridge']:
             ini['bgm_bridge'][key] = value

@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include "spicesdk.h"
-#include "../hosts/iidx34.hpp"
+#include "../hosts/adapter.hpp"
 
 static constexpr const char* kDays[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
 static bgm::Profile activeProfile;
@@ -200,7 +200,7 @@ static std::vector<std::wstring> loopFiles(){
 }
 static bool selectProfile(const std::string& id,unsigned day){
     auto candidate=bgm::loadProfile(profilePath(id));
-    if(candidate.host!=bgmhost::supported.id)throw std::runtime_error("profile requires a different host adapter");
+    if(!bgm::supportsHost(candidate,bgmhost::supported.family,bgmhost::supported.id))throw std::runtime_error("profile requires a different host adapter");
     std::string variant=candidate.schedule=="fixed"?candidate.fixedVariant:kDays[day];
     makeEntries(candidate,variant);
     for(auto& e:entries){DWORD attr=GetFileAttributesW(e.disk.c_str());
@@ -224,7 +224,7 @@ static bool configure(HMODULE game) {
     if (!GetPrivateProfileIntW(L"bgm_bridge", L"enabled", 1, ini.c_str())) {
         logLine("disabled by bgm_bridge.ini"); return false;
     }
-    if (fileHash(gamePath) != bgmhost::supported.sha256) {
+    if (!bgmhost::select(fileHash(gamePath))) {
         logLine("unsupported bm2dx.dll SHA256; no hooks installed", true); return false;
     }
     wchar_t value[32];
@@ -279,7 +279,7 @@ extern "C" __declspec(dllexport) int __cdecl spice_sdk_entry_point(spice_sdk_ini
         if (!exchange(statSlot, reinterpret_cast<void*>(originalStat), reinterpret_cast<void*>(hookedStat))) {
             destroy(); logLine("stat hook installation failed; open hook rolled back", true); return 1;
         }
-        logLine("ready v6: profile-driven BGM engine; host iidx34; daily sound mapping installed");
+        logLine((std::string("ready: profile-driven BGM engine; host=")+bgmhost::supported.id).c_str());
         return 0;
     } catch (...) { destroy(); logLine("initialization failed; hooks rolled back", true); return 1; }
 }

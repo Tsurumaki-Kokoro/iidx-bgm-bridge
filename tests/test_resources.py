@@ -28,8 +28,22 @@ class Resources(unittest.TestCase):
             self.assertEqual(len(ini['map']),31)
             for target in ini['map'].values():
                 full=target if target.startswith('/') else ini['profile']['resource_root']+'/'+target
-                self.assertTrue(full.startswith('/data/sound/system/bgm_bridge/sinobuz24/'))
+                self.assertTrue(full.startswith('/data/sound/system/bgm_bridge/'))
                 self.assertNotIn('..',full)
+
+    def test_host_registry_matches_compiled_specs(self):
+        from host_support import builds
+        header=(ROOT/'hosts/builds.hpp').read_text()
+        for family,info in builds().items():
+            self.assertIn(info['sha256'],header)
+            self.assertIn(info['version'],header)
+            self.assertIn('"'+family+'"',header)
+
+    def test_intro_loop_is_preserved(self):
+        source=template(1001);struct.pack_into('<II',source,20,400,4004)
+        target=template(1001);data=importer.patch(source,target)
+        self.assertEqual(data[20:29],source[20:29])
+        self.assertEqual(data[32:],source[32:])
 
     def test_patch_preserves_payload_and_signed_gain(self):
         source=template(1001);target=bytearray(source);target[30:32]=b'\x34\x12'

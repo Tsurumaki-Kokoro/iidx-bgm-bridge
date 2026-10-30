@@ -44,7 +44,7 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 | `src/plugin.cpp` | SDK lifecycle, INI loading, resource redirection and fallback |
 | `include/playback.hpp` | Host-independent synchronization and level transitions |
 | `include/profile.hpp` | Profile schema and validation |
-| `hosts/iidx34.hpp` | Build hash, addresses, state translation and audio calls |
+| `hosts/adapter.hpp + hosts/builds.hpp` | Build hash, addresses, state translation and audio calls |
 | `profiles/` | BGM resource routes and playback parameters |
 | `tools/` | Local importing, codec, metering, deployment and audio-free packaging |
 | `tests/` | Synthetic audio tests and playback/detour tests |
@@ -54,12 +54,12 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 
 Use an existing profile as the complete example. Profiles are installed in `modules/bgm_profiles/<id>.ini`.
 
-- `[profile]`: `schema=1`, safe `id`, `host`, `resource_root`; optional `fallback`. `schedule=weekday` selects sun–sat. `schedule=fixed` uses `fixed_variant` (default `default`). `{day}` expands to the selected variant. IDs accept ASCII letters, digits, `_` and `-`.
+- `[profile]`: `schema=1`, safe `id`, `host` (comma-separated host families or build IDs), `resource_root`; optional `fallback`. `schedule=weekday` selects sun–sat. `schedule=fixed` uses `fixed_variant` (default `default`). `{day}` expands to the selected variant. IDs accept ASCII letters, digits, `_` and `-`.
 - `[playback]`: `strategy` is `layered_sync`, `crossfade_fullmix`, or `original`. `transition_ms` accepts 100–2000. `layer_count` accepts 1–3.
 - `[levels]`: layered profiles require `state0` through `state3`, each with four comma-separated finite values in 0–127. Unused layers must be zero. Slots correspond to the host adapter's logical default BGM slots. The SINOBUZ profile maps the host's final state to three stems, keeping slot 3 muted.
 - `[map]`: keys are paths relative to `/data/sound/system/`. Values are relative to `resource_root` or absolute virtual paths under `/data/sound/system/`. Traversal and Windows filesystem paths are rejected. There must be 1–128 mappings.
 
-The current adapter requires three default-loop routes for controlled strategies. It accepts 44.1 kHz loops starting at zero, with matching frame counts and full-length boundaries. `original` does not require the playback hooks. Additional arrangements using the same three-stem model can use new profiles. Segmented transitions, more stems or additional events require a new strategy; a different host build requires an adapter with verified addresses and guards.
+The shared IIDX 33/34 adapter selects a compiled address table by executable SHA-256 and requires three default-loop routes for controlled strategies. It accepts 44.1 kHz loops starting at zero, with matching frame counts and full-length boundaries. `original` does not require the playback hooks. Additional arrangements using the same three-stem model can use new profiles. Segmented transitions, more stems or additional events require a new strategy; a different host build requires an adapter with verified addresses and guards.
 
 ## Audio preparation
 
@@ -76,3 +76,11 @@ Pushing a version tag such as `v0.1.0` runs the same checks and publishes a GitH
 ## Contributions
 
 Keep English and Chinese documents aligned. Keep host-specific addresses out of the generic playback core. Add tests for new scheduling behavior using generated fixtures. Do not submit game binaries, audio, personal configurations, recordings or extracted reverse-engineering workspaces. Follow the project GPL-3.0-only license and preserve dependency notices.
+
+## Sparkle Shower and host verification
+
+`sparkle33` uses fixed/original scheduling on both IIDX 33 and 34, retaining both original audio variants and l2's intro/nonzero loop start. Import changes only the destination loop count, pan and sound ID; source gain, loop range and compressed payload remain intact. Use `--profile sparkle33 --source-root "D:\IIDX33\data\sound\system"` to import, and `--profile sparkle33` for validation/deployment. SINOBUZ resources are not required for this profile.
+
+`hosts/builds.hpp` contains addresses and hashes; `tools/host_builds.json` supplies the same build registry to tools. Tests check their consistency. The verified IIDX 33 installation uses release code 2026081900. Support is restricted to the exact listed executable hash; editing a property version does not add DLL support.
+
+`build/host-image-tests.exe` is an optional private test taking a host family, game DLL and three generated SINOBUZ stem paths. It maps the DLL with DONT_RESOLVE_DLL_REFERENCES, installs and restores real playback hooks, without resolving game dependencies or executing the entry point/game functions. Run it only on local DLLs whose hashes were verified. It does not replace in-game tests.

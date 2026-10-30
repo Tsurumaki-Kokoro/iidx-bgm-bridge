@@ -5,6 +5,7 @@
 #include "profile.hpp"
 #include "playback.hpp"
 #include "../vendor/minhook/include/MinHook.h"
+#include "../hosts/adapter.hpp"
 static void require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 struct Audio final:bgm::Engine {
     uint64_t time=1000;std::array<bool,4> running{true,true,false,false};
@@ -17,6 +18,29 @@ struct Audio final:bgm::Engine {
     uint64_t now()override{return time;}
 };
 static int __cdecl detour(){return 2;}
+static void hostAdapterTest(const bgm::Profile& profile){
+    unsigned char header[122]{};memcpy(header,"SD9\0",4);memcpy(header+102,"fact",4);
+    uint32_t rate=44100,frames=44100;memcpy(header+56,&rate,4);memcpy(header+110,&frames,4);
+    {std::ofstream file("build/test-loop.sd9",std::ios::binary);file.write(reinterpret_cast<char*>(header),sizeof(header));}
+    const unsigned char advance[]={0x40,0x53,0x48,0x83,0xec,0x20};
+    const unsigned char target[]={0x48,0x89,0x5c,0x24,0x08,0x57};
+    auto image=static_cast<unsigned char*>(VirtualAlloc(nullptr,0xB00000,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
+    require(image!=nullptr,"host fixture allocation");
+    for(const auto& spec:bgmhost::builds){
+        require(bgmhost::select(spec.sha256),"known host hash selected");
+        require(!bgmhost::select(std::string(64,'0')),"unknown host hash rejected");
+        memset(image+spec.advance,0x90,32);memset(image+spec.target,0x90,32);
+        memcpy(image+spec.advance,advance,sizeof(advance));memcpy(image+spec.target,target,sizeof(target));
+        auto logger=+[](const char*,bool){};
+        require(bgmhost::install(reinterpret_cast<HMODULE>(image),profile,{L"build/test-loop.sd9",L"build/test-loop.sd9",L"build/test-loop.sd9"},logger),"host adapter accepts real compiler prologues");
+        bgmhost::stop();
+        require(memcmp(image+spec.advance,advance,sizeof(advance))==0&&memcmp(image+spec.target,target,sizeof(target))==0,"adapter restores both hooks");
+        image[spec.advance]=0x90;
+        require(!bgmhost::install(reinterpret_cast<HMODULE>(image),profile,{L"build/test-loop.sd9",L"build/test-loop.sd9",L"build/test-loop.sd9"},logger),"changed host prologue rejected");
+        bgmhost::stop();
+    }
+    VirtualFree(image,0,MEM_RELEASE);
+}
 static void detourTest(){
     auto page=static_cast<unsigned char*>(VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
     require(page!=nullptr,"allocation");const unsigned char original[]={0xB8,1,0,0,0,0xC3};memcpy(page,original,sizeof(original));
@@ -64,7 +88,12 @@ int main(){try{
         require(rejected,"invalid profile must fail closed");
     }
     require(!bgm::safeId("../x")&&!bgm::safePath("C:/outside")&&!bgm::safePath("../x"),"path validation");
+    require(bgm::supportsHost(native,"iidx33","iidx33-20260819")&&bgm::supportsHost(native,"iidx34","iidx34-20260916"),"shared profile host families");
+    require(!bgm::supportsHost(native,"iidx32","iidx32-unknown"),"unlisted hosts rejected");
+    auto sparkle=bgm::loadProfile(L"profiles/sparkle33.ini");
+    require(sparkle.strategy==bgm::Strategy::Original&&sparkle.schedule=="fixed","Sparkle keeps native intro-loop scheduling");
     detourTest();
+    hostAdapterTest(native);
     std::cout<<"PASS: profiles/schema/path validation, fixed and weekday layouts, layered stages, muted-stem sync/no restart, host-state adaptation, fullmix fallback, custom/forced bypass and real detours\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<"\n";return 1;}}

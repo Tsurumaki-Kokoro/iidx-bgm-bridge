@@ -41,6 +41,11 @@ inline unsigned number(const std::string& s,unsigned minimum,unsigned maximum) {
     auto n=std::stoul(s);if(n<minimum || n>maximum)throw std::runtime_error("number outside supported range");
     return static_cast<unsigned>(n);
 }
+inline bool supportsHost(const Profile& p,const std::string& family,const std::string& build){
+    std::istringstream values(p.host);std::string id;
+    while(std::getline(values,id,','))if(trim(id)==family||trim(id)==build)return true;
+    return false;
+}
 inline Profile parseProfile(std::istream& input) {
     std::map<std::string,std::map<std::string,std::string>> ini;
     std::string section,line;
@@ -59,7 +64,10 @@ inline Profile parseProfile(std::istream& input) {
     };
     if(required("profile","schema")!="1")throw std::runtime_error("unsupported profile schema");
     Profile p;p.id=required("profile","id");p.host=required("profile","host");
-    if(!safeId(p.id)||!safeId(p.host))throw std::runtime_error("unsafe profile/host id");
+    if(!safeId(p.id))throw std::runtime_error("unsafe profile id");
+    std::istringstream hosts(p.host);std::string host;unsigned count=0;
+    while(std::getline(hosts,host,',')){if(!safeId(trim(host)))throw std::runtime_error("unsafe host id");++count;}
+    if(!count||p.host.back()==',')throw std::runtime_error("empty host id");
     p.root=required("profile","resource_root");
     if(!safePath(p.root)||p.root.rfind("/data/sound/system/",0)!=0)throw std::runtime_error("unsafe resource root");
     if(ini["profile"].count("fallback")){p.fallback=ini["profile"]["fallback"];if(!safeId(p.fallback))throw std::runtime_error("invalid fallback id");}

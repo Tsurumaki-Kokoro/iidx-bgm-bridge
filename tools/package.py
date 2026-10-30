@@ -19,13 +19,14 @@ def package(version):
                     '--name','import-resources','--distpath',str(build),'--workpath',str(build/'freeze'),
                     '--specpath',str(build),'--paths',str(ROOT/'tools'),str(ROOT/'tools/import_resources.py')],check=True,cwd=ROOT)
     subprocess.run([str(build/'import-resources.exe'),'--help'],check=True)
-    name=f'IIDX-BGM-Bridge-{version}-iidx34-win64'
+    name=f'IIDX-BGM-Bridge-{version}-win64'
     with tempfile.TemporaryDirectory(dir=build,prefix='package-') as temp:
         tree=Path(temp)
         def copy(source,target):
             dest=tree/target;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/source,dest)
         copy('build/bgm_bridge.dll','modules/bgm_bridge.dll')
         copy('config/bgm_bridge.example.ini','modules/bgm_bridge.example.ini')
+        copy('tools/host_builds.json','tools/host_builds.json')
         for profile in (ROOT/'profiles').glob('*.ini'): copy(profile.relative_to(ROOT),'modules/bgm_profiles/'+profile.name)
         for tool in ('import-resources','audio_codec','loudness_meter'): copy('build/'+tool+'.exe','tools/'+tool+'.exe')
         for document in ('README.md','README.zh-CN.md','THIRD_PARTY_NOTICES.md','LICENSE'): copy(document,document)

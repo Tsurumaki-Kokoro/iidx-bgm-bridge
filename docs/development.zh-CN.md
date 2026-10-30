@@ -44,7 +44,7 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 | `src/plugin.cpp` | SDK 生命周期、INI、资源重定向和回退 |
 | `include/playback.hpp` | 与宿主无关的同步及音量渐变 |
 | `include/profile.hpp` | Profile 格式和校验 |
-| `hosts/iidx34.hpp` | 构建 hash、地址、状态映射和音频调用 |
+| `hosts/adapter.hpp + hosts/builds.hpp` | 构建 hash、地址、状态映射和音频调用 |
 | `profiles/` | BGM 资源映射和播放参数 |
 | `tools/` | 本地导入、编解码、测量、部署和无音频打包 |
 | `tests/` | 合成音频及播放/挂钩测试 |
@@ -54,12 +54,12 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 
 完整示例见现有 profile。安装位置为 `modules/bgm_profiles/<id>.ini`。
 
-- `[profile]`：`schema=1`、合法 `id`、`host`、`resource_root`，可选 `fallback`。`schedule=weekday` 选择 sun–sat；`schedule=fixed` 使用 `fixed_variant`，默认 `default`。`{day}` 替换为选中目录名。ID 仅支持 ASCII 字母、数字、下划线和连字符。
+- `[profile]`：`schema=1`、合法 `id`、`host`（逗号分隔的宿主系列或构建 ID）、`resource_root`，可选 `fallback`。`schedule=weekday` 选择 sun–sat；`schedule=fixed` 使用 `fixed_variant`，默认 `default`。`{day}` 替换为选中目录名。ID 仅支持 ASCII 字母、数字、下划线和连字符。
 - `[playback]`：`strategy` 为 `layered_sync`、`crossfade_fullmix` 或 `original`；`transition_ms` 为 100–2000；`layer_count` 为 1–3。
 - `[levels]`：三轨策略需要 state0–state3，每行四个逗号分隔的有限数值，范围 0–127，未用声部必须为 0。槽位对应宿主适配器的默认 BGM 逻辑槽。SINOBUZ 将最终宿主状态映射为三轨，保持第 4 槽静音。
 - `[map]`：左侧相对 `/data/sound/system/`；右侧相对 resource_root，或为该系统资源目录下的绝对虚拟路径。不允许目录穿越及 Windows 文件系统路径。映射数量为 1–128。
 
-当前适配器的受控策略要求三个默认循环路径，采样率 44.1 kHz、零起点、相同帧数和整段循环边界。`original` 无需播放挂钩。相同三轨模型的编曲可以只新增 profile；分段衔接、更多声部或额外事件需要新策略，更换宿主构建需要验证地址及保护条件并增加适配器。
+IIDX 33/34 共用适配器按程序 SHA-256 选择编译时地址表，受控策略要求三个默认循环路径，采样率 44.1 kHz、零起点、相同帧数和整段循环边界。`original` 无需播放挂钩。相同三轨模型的编曲可以只新增 profile；分段衔接、更多声部或额外事件需要新策略，更换宿主构建需要验证地址及保护条件并增加适配器。
 
 ## 音频准备
 
@@ -76,3 +76,11 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 ## 贡献
 
 同步维护中英文文档。宿主地址不应进入通用播放核心。新增调度行为应使用生成数据补充测试。不要提交游戏程序、音频、个人配置、录制文件或提取的逆向研究工作目录。遵循项目 GPL-3.0-only 许可，并保留依赖声明。
+
+## Sparkle Shower 与宿主验证
+
+`sparkle33` 使用 fixed/original 策略，在 IIDX 33 和 34 上保留两套原始音频变体，以及 l2 前奏和非零循环起点。导入时仅替换目标的循环次数、声像与声音 ID，保留来源增益、循环区间及压缩数据，不做三轨重混。指定 `--profile sparkle33 --source-root "D:\IIDX33\data\sound\system"` 生成资源，校验/部署也可使用 `--profile sparkle33`。无需同时导入 SINOBUZ 资源。
+
+`hosts/builds.hpp` 保存宿主地址和 hash，`tools/host_builds.json` 为工具提供相同构建列表；测试检查两者一致。33 代当前验证安装的 release code 为 2026081900。支持以列出的精确 hash 为准，修改属性文件版本号不会让其他 DLL 获得支持。
+
+`build/host-image-tests.exe` 是可选私有测试工具，参数为宿主系列、游戏 DLL 和三个已生成 SINOBUZ 声部路径。它使用 DONT_RESOLVE_DLL_REFERENCES 映射 DLL，实际安装并还原播放挂钩，不解析游戏依赖、不执行入口或游戏函数。仅对已核对 hash 的本地 DLL 运行。不能替代游戏内测试。

@@ -6,18 +6,15 @@
 #include "../include/playback.hpp"
 #include "../vendor/minhook/include/MinHook.h"
 
+#include "builds.hpp"
+
 namespace bgmhost {
 // All executable-specific knowledge is confined to this adapter.
-struct Spec {
-    const char* id="iidx34-20260916";
-    const char* sha256="3755587f44785effe5008f74cfe7dccbdf423ad09feead48e00a90f78a42fe83";
-    const char* avsOpen="XCgsqzn000004e";
-    const char* avsStat="XCgsqzn0000063";
-    uintptr_t advance=0x95ACA0,target=0x95A8B0,lookup=0xA801F0;
-    uintptr_t playing=0x5B80F0,play=0x5B83B0,custom=0x95AB60,volume=0x5B7CC0;
-    std::array<int,4> soundIds{0x2550,0x25A0,0x25F0,0x2640};
-};
-inline const Spec supported;
+inline Spec supported=iidx34;
+inline bool select(const std::string& hash){
+    for(const auto& candidate:builds)if(hash==candidate.sha256){supported=candidate;return true;}
+    return false;
+}
 using Logger=void(*)(const char*,bool);
 using Advance=void(__cdecl*)(void*);
 using Target=float(__cdecl*)(void*,int);
@@ -28,6 +25,7 @@ inline Lookup lookup=nullptr;
 inline bool (__cdecl* playing)(int,int*)=nullptr;
 inline void (__cdecl* play)(int)=nullptr;
 inline bool (__cdecl* custom)(void*,int*)=nullptr;
+inline bool (__cdecl* customSecondary)(void*,int*)=nullptr;
 inline void (__cdecl* volume)(int,int)=nullptr;
 inline void* advanceAddress=nullptr;
 inline void* targetAddress=nullptr;
@@ -61,7 +59,7 @@ inline WinEngine audio;
 inline std::unique_ptr<bgm::Playback> playback;
 inline bgm::Context context(void* owner){
     bgm::Context c;c.owner=owner;c.state=field(owner,0);c.mask=field(owner,0x10);
-    c.forced=*(static_cast<unsigned char*>(owner)+0x49)!=0;c.custom=custom(owner,nullptr);
+    c.forced=*(static_cast<unsigned char*>(owner)+0x49)!=0;c.custom=custom(owner,nullptr)||(*(static_cast<unsigned char*>(owner)+0x48)&&customSecondary(owner,nullptr));
     for(unsigned i=0;i<4;++i)memcpy(&c.applied[i],static_cast<unsigned char*>(owner)+0x14+i*4,4);
     return c;
 }
@@ -96,13 +94,13 @@ inline void stop(){
 }
 inline bool install(HMODULE game,const bgm::Profile& profile,const std::vector<std::wstring>& loops,Logger log){
     logger=log;
-    if(profile.host!=supported.id)return false;
+    if(!bgm::supportsHost(profile,supported.family,supported.id))return false;
     if(profile.strategy==bgm::Strategy::Original)return true;
     if(loops.size()!=3)return false;
     double duration=0;
     for(auto& file:loops){double d=readLoop(file);if(d<=0||(duration&&std::abs(duration-d)>.001))return false;duration=d;}
     auto base=reinterpret_cast<unsigned char*>(game);
-    const unsigned char a[]={0x53,0x48,0x83,0xEC,0x20},t[]={0x48,0x89,0x5C,0x24,0x08,0x57};
+    const unsigned char a[]={0x40,0x53,0x48,0x83,0xEC,0x20},t[]={0x48,0x89,0x5C,0x24,0x08,0x57};
     if(memcmp(base+supported.advance,a,sizeof(a))||memcmp(base+supported.target,t,sizeof(t)))return false;
     auto status=MH_Initialize();if(status!=MH_OK&&status!=MH_ERROR_ALREADY_INITIALIZED)return false;
     owned=status==MH_OK;
@@ -110,6 +108,7 @@ inline bool install(HMODULE game,const bgm::Profile& profile,const std::vector<s
     playing=reinterpret_cast<decltype(playing)>(base+supported.playing);
     play=reinterpret_cast<decltype(play)>(base+supported.play);
     custom=reinterpret_cast<decltype(custom)>(base+supported.custom);
+    customSecondary=reinterpret_cast<decltype(customSecondary)>(base+supported.customSecondary);
     volume=reinterpret_cast<decltype(volume)>(base+supported.volume);
     playback=std::make_unique<bgm::Playback>(profile,audio,duration);
     advanceAddress=base+supported.advance;targetAddress=base+supported.target;
