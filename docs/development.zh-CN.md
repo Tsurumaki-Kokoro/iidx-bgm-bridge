@@ -69,9 +69,9 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 
 ## CI 与发布
 
-`.github/workflows/build.yml` 在 main 提交、PR 和手动触发时构建测试。PyInstaller 将导入程序打包为独立 EXE，终端用户无需 Python。打包使用明确的文件列表，包含依赖许可，生成 ZIP 和 SHA-256，并检查解压后的程序。Actions 运行页面可下载二进制产物。
+`.github/workflows/build.yml` 在 main 提交、PR 和手动触发时构建测试。PyInstaller 将导入程序打包为独立 EXE，终端用户无需 Python。打包使用明确的文件列表，包含依赖许可，生成 ZIP 和 SHA-256，并检查解压后的程序。构建输出仅临时保留在 runner，不上传 Actions Artifact。可下载的压缩包仅通过 Releases 发布。
 
-推送 `v0.1.0` 等版本标签后执行同样的检查，仅在构建成功后创建 GitHub Release。只有发布任务具有 `contents: write`，其他任务使用只读权限。第三方 Actions 固定到提交 hash。CI 没有游戏资源，也没有音频凭据。确定发布标签前，应完成本地集成测试和实机听感检查。已发布版本不要重新打同名标签，应发布新版本。
+推送 `v0.1.0` 等版本标签后执行同样的检查，仅在构建成功后创建 GitHub Release。发布任务会重新构建并在本机打包，直接将 ZIP 和校验文件上传至 Release，不通过 Artifact 中转。只有发布任务具有 `contents: write`，其他任务使用只读权限。第三方 Actions 固定到提交 hash。CI 没有游戏资源，也没有音频凭据。确定发布标签前，应完成本地集成测试和实机听感检查。已发布版本不要重新打同名标签，应发布新版本。
 
 ## 贡献
 

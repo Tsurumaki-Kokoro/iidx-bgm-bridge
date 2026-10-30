@@ -74,11 +74,9 @@ The weekday is selected using the computer's local date and remains fixed until 
 
 A missing profile or asset triggers fallback. If controller validation fails, the plugin uses compatibility resources with original scheduling. If initialization cannot complete, installed hooks are rolled back. An unsupported executable hash leaves the plugin inactive.
 
-## Upgrade, migration and removal
+## Upgrade and removal
 
 For updates, close the game, replace the DLL/tools/profiles, and keep your existing `bgm_bridge.ini`. Rerun the importer when resource generation or profile paths change. Keep the previous package if you need a rollback.
-
-When migrating from `daily24`, remove `-k daily24.dll` from the launcher before adding `-k bgm_bridge.dll`; do not load both plugins. The new importer builds its own complete resource set and does not require the old `daily24` resource directory. Copy any preferred weekday setting into the new INI. After confirming the migration, old plugin files can be removed separately.
 
 To uninstall, remove the launch argument, then remove `modules/bgm_bridge.dll`, its INI/example, the two included profiles and the generated `data/sound/system/bgm_bridge/sinobuz24` directory. Remove importer tools only if no other installation needs them. Original game audio is not modified by this project.
 

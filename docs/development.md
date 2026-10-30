@@ -69,9 +69,9 @@ Complete mixes are rendered from the calibrated stems and encoded with Windows A
 
 ## CI and releases
 
-`.github/workflows/build.yml` builds and tests on main pushes, pull requests and manual dispatches. It bundles the importer with PyInstaller so end users need no Python installation. Packaging uses an explicit file list, includes dependency notices, produces a ZIP plus SHA-256 file, and checks the extracted executable. Binary artifacts are available on the Actions run.
+`.github/workflows/build.yml` builds and tests on main pushes, pull requests and manual dispatches. It bundles the importer with PyInstaller so end users need no Python installation. Packaging uses an explicit file list, includes dependency notices, produces a ZIP plus SHA-256 file, and checks the extracted executable. Build outputs remain temporary to the runner; no Actions artifacts are uploaded. Downloadable packages are published only through Releases.
 
-Pushing a version tag such as `v0.1.0` runs the same checks and publishes a GitHub Release only after build success. The release job alone receives `contents: write`; other jobs use read access. Third-party actions are pinned to commit hashes. CI has no game assets and no audio credentials. Run the local integration test and game listening checks before choosing a release tag. Avoid retagging an existing release; publish a new version instead.
+Pushing a version tag such as `v0.1.0` runs the same checks and publishes a GitHub Release only after build success. The release job rebuilds and packages locally, then uploads the ZIP and checksum directly to the Release without artifact transfer. The release job alone receives `contents: write`; other jobs use read access. Third-party actions are pinned to commit hashes. CI has no game assets and no audio credentials. Run the local integration test and game listening checks before choosing a release tag. Avoid retagging an existing release; publish a new version instead.
 
 ## Contributions
 

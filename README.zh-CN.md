@@ -74,11 +74,9 @@ smooth_transition=1
 
 缺少 profile 或资源时尝试回退。控制器校验失败时，使用兼容资源和原始调度。初始化不能完成时撤销已安装的挂钩。程序 hash 不匹配时插件不启用。
 
-## 更新、迁移与卸载
+## 更新与卸载
 
 更新时关闭游戏，替换 DLL、工具和 profiles，保留现有 `bgm_bridge.ini`。资源生成逻辑或 profile 路径变化时，重新运行导入工具。保留上一版压缩包以便回退。
-
-从 `daily24` 迁移时，先从启动命令移除 `-k daily24.dll`，再添加 `-k bgm_bridge.dll`，不要同时加载。新导入工具会生成完整的独立资源集，不依赖旧 `daily24` 资源目录。将原来偏好的星期设置复制到新 INI；确认迁移正常后，可另行删除旧插件文件。
 
 卸载时移除启动参数，再删除 `modules/bgm_bridge.dll`、对应 INI/示例、两个内置 profiles 和生成的 `data/sound/system/bgm_bridge/sinobuz24` 目录。导入工具若没有其他安装需要，也可删除。项目不会改写原始游戏音频。
 
