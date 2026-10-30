@@ -38,6 +38,10 @@ public:
     AdvanceResult advance(const Context& c) {
         if(!valid(c)||config.strategy==Strategy::Original){reset();return {};}
         if(c.state!=2)return {};
+        if(config.strategy==Strategy::Staged){
+            if(c.mask==0){engine.volume(2,0);engine.start(2);engine.volume(2,0);}
+            return {true,false,2};
+        }
         if(c.mask==0) {
             int outgoing=engine.playing(0)?0:(engine.playing(1)?1:-1);
             if(outgoing<0||duration<=0)return {};

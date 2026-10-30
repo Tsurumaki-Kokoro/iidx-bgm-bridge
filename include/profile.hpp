@@ -10,7 +10,7 @@
 #include <algorithm>
 
 namespace bgm {
-enum class Strategy { Original, Crossfade, Layered };
+enum class Strategy { Original, Crossfade, Layered, Staged };
 struct Resource { std::string source, target; };
 struct Profile {
     std::string id, host, root, fallback, schedule = "weekday", fixedVariant = "default";
@@ -76,12 +76,13 @@ inline Profile parseProfile(std::istream& input) {
     if(p.schedule=="fixed"){p.fixedVariant=required("profile","fixed_variant");if(!safeId(p.fixedVariant))throw std::runtime_error("unsafe fixed variant");}
     auto mode=required("playback","strategy");
     if(mode=="layered_sync")p.strategy=Strategy::Layered;
+    else if(mode=="staged_tracks")p.strategy=Strategy::Staged;
     else if(mode=="crossfade_fullmix")p.strategy=Strategy::Crossfade;
     else if(mode=="original")p.strategy=Strategy::Original;
     else throw std::runtime_error("unsupported playback strategy");
     if(ini["playback"].count("transition_ms"))p.fadeMs=number(ini["playback"]["transition_ms"],100,2000);
     if(ini["playback"].count("layer_count"))p.layerCount=number(ini["playback"]["layer_count"],1,3);
-    if(p.strategy==Strategy::Layered) {
+    if(p.strategy==Strategy::Layered||p.strategy==Strategy::Staged) {
         for(unsigned state=0;state<4;++state){
             auto key="state"+std::to_string(state);std::istringstream values(required("levels",key.c_str()));
             std::string token;unsigned i=0;

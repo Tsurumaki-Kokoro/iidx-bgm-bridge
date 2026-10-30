@@ -1,4 +1,4 @@
-"""Import private IIDX 24/33 audio for supported IIDX 33/34 hosts; no downloads."""
+"""Import private IIDX 18-24/33 audio for supported IIDX 33/34 hosts; no downloads."""
 import argparse
 import configparser
 import hashlib
@@ -12,6 +12,8 @@ import tempfile
 from datetime import datetime
 import numpy as np
 from host_support import detect
+from legacy_audio import SPECS, prepare_legacy
+AUDIO_PROFILES=('sinobuz24','sparkle33',*SPECS)
 
 FROZEN = getattr(sys, 'frozen', False)
 ROOT = Path(sys.executable).resolve().parent.parent if FROZEN else Path(__file__).resolve().parents[1]
@@ -180,21 +182,22 @@ def prepare_sparkle(source,game,output):
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--profile',choices=['sinobuz24','sparkle33'],help='Audio profile (default: sinobuz24)')
-    ap.add_argument('--source-root',type=Path,help='IIDX 24 system/0 or IIDX 33 system directory')
+    ap.add_argument('--profile',choices=AUDIO_PROFILES,help='Audio profile (default: sinobuz24)')
+    ap.add_argument('--source-root',type=Path,help='Audio source directory; legacy profiles also accept the source game root')
     ap.add_argument('--game-root',type=Path,help='Supported IIDX 33/34 root directory')
     ap.add_argument('--output-root',type=Path,help='Alternate output root (defaults to game root)')
     args=ap.parse_args(); interactive=args.source_root is None or args.game_root is None
     try:
-        profile=args.profile or ((input('Audio profile [sinobuz24/sparkle33] (sinobuz24): ').strip() or 'sinobuz24') if interactive else 'sinobuz24')
-        require(profile in ('sinobuz24','sparkle33'),'Unknown audio profile')
-        prompt='IIDX 24 data/sound/system/0: ' if profile=='sinobuz24' else 'IIDX 33 data/sound/system: '
+        profile=args.profile or ((input('Audio profile ['+'/'.join(AUDIO_PROFILES)+'] (sinobuz24): ').strip() or 'sinobuz24') if interactive else 'sinobuz24')
+        require(profile in AUDIO_PROFILES,'Unknown audio profile')
+        prompt='IIDX 24 data/sound/system/0: ' if profile=='sinobuz24' else ('IIDX 33 data/sound/system: ' if profile=='sparkle33' else 'Source game root, sound directory or SSP file: ')
         source=args.source_root or Path(input(prompt).strip().strip('"'))
         game=args.game_root or Path(input('IIDX 33/34 root: ').strip().strip('"'))
         from deploy import process_names
         require(not process_names().intersection({'spice.exe','spice64.exe','bm2dx.exe'}),'Close the game before importing')
         if profile=='sinobuz24':prepare(source,game,args.output_root or game)
-        else:prepare_sparkle(source,game,args.output_root or game)
+        elif profile=='sparkle33':prepare_sparkle(source,game,args.output_root or game)
+        else:prepare_legacy(sys.modules[__name__],profile,source,game,args.output_root or game)
     except (OSError,ValueError,RuntimeError) as error:
         print(f'Import failed: {error}',file=sys.stderr)
         if interactive: input('Press Enter to close...')

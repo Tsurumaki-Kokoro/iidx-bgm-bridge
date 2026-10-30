@@ -7,7 +7,7 @@
 #include "../hosts/adapter.hpp"
 static void log(const char* text,bool){std::cout<<text<<'\n';}
 int wmain(int argc,wchar_t** argv){
-    if(argc!=6){std::cerr<<"family game.dll l0.sd9 l1.sd9 l2.sd9\n";return 2;}
+    if(argc!=6&&argc!=7){std::cerr<<"family game.dll l0.sd9 l1.sd9 l2.sd9 [profile.ini]\n";return 2;}
     bool found=false;
     for(const auto& spec:bgmhost::builds){
         std::wstring family(spec.family,spec.family+strlen(spec.family));
@@ -16,7 +16,7 @@ int wmain(int argc,wchar_t** argv){
     if(!found)return 2;
     auto game=LoadLibraryExW(argv[2],nullptr,DONT_RESOLVE_DLL_REFERENCES);
     if(!game){std::cerr<<"Cannot map game DLL: "<<GetLastError()<<'\n';return 1;}
-    auto profile=bgm::loadProfile(L"profiles/sinobuz24.ini");
+    auto profile=bgm::loadProfile(argc==7?argv[6]:L"profiles/sinobuz24.ini");
     bool installed=bgmhost::install(game,profile,{argv[3],argv[4],argv[5]},log);
     bgmhost::stop();
     auto start=reinterpret_cast<const unsigned char*>(game)+bgmhost::supported.advance;

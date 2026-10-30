@@ -4,10 +4,11 @@
 
 基于 Windows x64 Spice SDK 的 IIDX 33/34 系统 BGM 插件。内置 SINOBUZ profile，按星期选择七套编曲，并在菜单切换时保持三个声部同步播放。
 
-**项目不包含游戏程序或音频。** 请使用自己的 IIDX 24 或 33 音频，以及受支持的 IIDX 33/34 本地安装生成运行资源。导入工具不会下载游戏数据。
+**项目不包含游戏程序或音频。** 请使用自己的 IIDX 18–24 或 33 音频，以及受支持的 IIDX 33/34 本地安装生成运行资源。导入工具不会下载游戏数据。
 
 ## 功能
 
+- IIDX 18–23 音频，包括 PENDUAL 的 PRESENT、FUTURE 两套编曲。
 - SINOBUZ 七套每日编曲，也可以固定星期。
 - Sparkle Shower 音频，保留原有选曲前奏和循环边界。
 - 三轨连续播放，可配置阶段音量和渐变时间。
@@ -23,7 +24,7 @@
 | 系统 | Windows x64 |
 | 宿主 | 下方列出的 IIDX 33/34 构建 |
 | 加载器 | 支持 Spice SDK 插件及 `-k` DLL 参数的 Spice2x |
-| 音频来源 | IIDX 24 `data/sound/system/0` 或 IIDX 33 `data/sound/system`，以及目标游戏安装 |
+| 音频来源 | 本地 IIDX 18–24 或 33 资源（见下文），以及目标游戏安装 |
 | Python | 使用 Release 压缩包无需安装；从源码构建时需要 |
 
 ### DLL 支持的游戏版本
@@ -37,6 +38,30 @@
 - `2026081900`
 
 ### 支持的音频资源版本
+
+**beatmania IIDX 18 Resort Anthem**
+
+- `2011071200`
+
+**beatmania IIDX 19 Lincle**
+
+- `2012062500`
+
+**beatmania IIDX 20 tricoro**
+
+- `2013090900`
+
+**beatmania IIDX 21 SPADA**
+
+- `2014071600`
+
+**beatmania IIDX 22 PENDUAL**
+
+- `2015080500`
+
+**beatmania IIDX 23 copula**
+
+- `2016083100`
 
 **beatmania IIDX 24 SINOBUZ**
 
@@ -66,7 +91,7 @@ IIDX 33 SHA-256：
 
 1. 关闭游戏。从 [Releases](https://github.com/Tsurumaki-Kokoro/iidx-bgm-bridge/releases) 下载并解压 Windows 压缩包，将内容复制到目标 IIDX 33/34 根目录。GitHub 自动生成的源码 ZIP 不是可直接使用的二进制包。
 2. 将 `modules/bgm_bridge.example.ini` 复制为 `modules/bgm_bridge.ini`。更新包只提供示例配置，避免覆盖现有设置。
-3. 运行 `tools/import-resources.exe`，选择 `sinobuz24` 或 `sparkle33`，再填写音频来源和目标游戏根目录。Sparkle Shower 使用 IIDX 33 的 `data/sound/system`。所选资源全部生成并通过检查后才会安装。
+3. 运行 `tools/import-resources.exe`，选择音频 profile，再填写来源路径和目标游戏根目录。Sparkle Shower 使用 IIDX 33 的 `data/sound/system`。所选资源全部生成并通过检查后才会安装。
 4. 在现有 Spice2x 启动命令后添加 `-k bgm_bridge.dll`，保留其他参数。DLL 应放在 `modules/` 目录。
 5. 启动游戏。若没有生效，请查看游戏根目录的 `bgm_bridge.log`。
 
@@ -86,6 +111,28 @@ tools\import-resources.exe --profile sparkle33 --source-root "D:\IIDX33\data\sou
 
 生成文件位于 `data/sound/system/bgm_bridge/<profile>/`。重新导入会将上一套资源保存在旁边的 `<profile>.backup-*` 目录。可使用 `--output-root` 指定单独的输出目录，先检查再安装。导入前请关闭游戏。
 
+## IIDX 18–23 音频
+
+| Profile | 音频 | 播放方式 |
+| --- | --- | --- |
+| `resort18` | IIDX 18 Resort Anthem | SSP / 独立阶段曲目 |
+| `lincle19` | IIDX 19 Lincle | SSP / 独立阶段曲目 |
+| `tricoro20` | IIDX 20 tricoro | 同步声部 |
+| `spada21` | IIDX 21 SPADA | 同步声部 |
+| `pendual22` | IIDX 22 PENDUAL PRESENT | 同步声部 |
+| `pendual22_future` | IIDX 22 PENDUAL FUTURE | 同步声部 |
+| `copula23` | IIDX 23 copula | 同步声部 |
+
+18/19 代可选择来源游戏根目录、`sys_sd` 目录或 `sys_sound.ssp` 文件；导入工具直接读取原始 SSP，不需要额外解包工具。20–23 代可选择来源游戏根目录或 `data/sound/system`。
+
+```bat
+tools\import-resources.exe --profile tricoro20 --source-root "D:\IIDX20" --game-root "D:\IIDX34"
+```
+
+随后在主 INI 设置 `profile=tricoro20`、`fallback_profile=tricoro20_compat`。其他 20–23 代 profile 使用各自的 `<profile>_compat` 回退。18/19 代则将两个字段设为相同 ID（例如 `resort18`），并保持 `smooth_transition=1`：独立阶段曲目需要播放控制器。控制器不能初始化时，插件会保留游戏原始音频，避免将不同曲目叠加播放。
+
+18/19 代保留原始前奏和循环边界，在卡片进入、模式选择、选曲曲目之间交叉渐变；导入选定音乐音效，退出音效保留宿主版本。20–23 代默认菜单使用同步声部，独立选曲模式使用生成的完整混音。只有明确选择 PENDUAL FUTURE profile 时才使用 `_02` 资源；不会将历史残留文件作为 copula 编曲导入。新增的是音频 profile，不包括 18–23 代游戏宿主支持。
+
 ## 配置
 
 编辑 `modules/bgm_bridge.ini`：
@@ -102,7 +149,7 @@ smooth_transition=1
 | 设置 | 可选值及行为 |
 | --- | --- |
 | `enabled` | `0` 关闭插件，`1` 开启 |
-| `profile` | `sinobuz24` 使用同步三轨，`sinobuz24_compat` 使用完整混音；`sparkle33` 使用 Sparkle Shower |
+| `profile` | `sinobuz24` 使用同步三轨，`sinobuz24_compat` 使用完整混音；`sparkle33` 使用 Sparkle Shower；18–23 代见上表 |
 | `fallback_profile` | 主 profile 或其资源无法加载时使用的配置 |
 | `weekday` | `auto`、`sun`、`mon`、`tue`、`wed`、`thu`、`fri`、`sat` |
 | `smooth_transition` | `1` 使用选定的控制策略；`0` 使用兼容资源及宿主原始调度 |

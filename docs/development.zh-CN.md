@@ -55,11 +55,11 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 完整示例见现有 profile。安装位置为 `modules/bgm_profiles/<id>.ini`。
 
 - `[profile]`：`schema=1`、合法 `id`、`host`（逗号分隔的宿主系列或构建 ID）、`resource_root`，可选 `fallback`。`schedule=weekday` 选择 sun–sat；`schedule=fixed` 使用 `fixed_variant`，默认 `default`。`{day}` 替换为选中目录名。ID 仅支持 ASCII 字母、数字、下划线和连字符。
-- `[playback]`：`strategy` 为 `layered_sync`、`crossfade_fullmix` 或 `original`；`transition_ms` 为 100–2000；`layer_count` 为 1–3。
-- `[levels]`：三轨策略需要 state0–state3，每行四个逗号分隔的有限数值，范围 0–127，未用声部必须为 0。槽位对应宿主适配器的默认 BGM 逻辑槽。SINOBUZ 将最终宿主状态映射为三轨，保持第 4 槽静音。
+- `[playback]`：`strategy` 为 `layered_sync`、`crossfade_fullmix`、`staged_tracks` 或 `original`；`transition_ms` 为 100–2000；`layer_count` 为 1–3。
+- `[levels]`：三轨及独立阶段策略需要 state0–state3，每行四个逗号分隔的有限数值，范围 0–127，未用声部必须为 0。槽位对应宿主适配器的默认 BGM 逻辑槽。SINOBUZ 将最终宿主状态映射为三轨，保持第 4 槽静音。
 - `[map]`：左侧相对 `/data/sound/system/`；右侧相对 resource_root，或为该系统资源目录下的绝对虚拟路径。不允许目录穿越及 Windows 文件系统路径。映射数量为 1–128。
 
-IIDX 33/34 共用适配器按程序 SHA-256 选择编译时地址表，受控策略要求三个默认循环路径，采样率 44.1 kHz、零起点、相同帧数和整段循环边界。`original` 无需播放挂钩。相同三轨模型的编曲可以只新增 profile；分段衔接、更多声部或额外事件需要新策略，更换宿主构建需要验证地址及保护条件并增加适配器。
+IIDX 33/34 共用适配器按程序 SHA-256 选择编译时地址表，受控策略要求三个默认循环路径，同步/混音渐变策略要求采样率 44.1 kHz、零起点、相同帧数和整段循环边界；独立阶段策略保留不同长度和非零循环起点。`original` 无需播放挂钩。相同三轨模型的编曲可以只新增 profile；分段衔接、更多声部或额外事件需要新策略，更换宿主构建需要验证地址及保护条件并增加适配器。
 
 ## 音频准备
 
@@ -84,3 +84,13 @@ IIDX 33/34 共用适配器按程序 SHA-256 选择编译时地址表，受控策
 `hosts/builds.hpp` 保存宿主地址和 hash，`tools/host_builds.json` 为工具提供相同构建列表；测试检查两者一致。33 代当前验证安装的 release code 为 2026081900。支持以列出的精确 hash 为准，修改属性文件版本号不会让其他 DLL 获得支持。
 
 `build/host-image-tests.exe` 是可选私有测试工具，参数为宿主系列、游戏 DLL 和三个已生成 SINOBUZ 声部路径。它使用 DONT_RESOLVE_DLL_REFERENCES 映射 DLL，实际安装并还原播放挂钩，不解析游戏依赖、不执行入口或游戏函数。仅对已核对 hash 的本地 DLL 运行。不能替代游戏内测试。
+
+## IIDX 18–23 音频适配
+
+`tools/legacy_audio.py` 管理来源规则，宿主 hash 列表仍只有 33/34。18/19 SSP 表头为 72 字节，后接 250 组、每组 80 个 uint32 偏移。读取时检查表头、索引、条目边界、SD9 格式及声音 ID。默认选择组 14 子项 1，模式选择为子项 0；卡片进入为 18 代子项 11、19 代子项 8；确认音效为组 20 子项 0。这些索引来自对应程序的名称表核对，不依赖音频内容扫描猜测。
+
+18/19 的 `staged_tracks` 将 entry、mode、selection 作为独立曲目渐变，选曲从头播放，不做跨曲目相位同步；不要求三轨等长。保留源循环区间及压缩数据，按宿主参考响度校准阶段增益，检查采样峰值。该策略不允许无控制器的原生调度回退；不可用时保留宿主音频。旧来源没有单独退出音效映射，因此该音效不替换。
+
+20–23 使用与 SINOBUZ 相同的同步三轨模型，但日程为 fixed。主 profile 和对应 compat profile 共用独立生成资源，所有原始声部 payload 保留。PENDUAL PRESENT/FUTURE 分别使用默认文件和 `_02` 文件；其他代目不自动采用继承文件。完整混音采用标准立体声 MS ADPCM；必要时缩短编码块至 128/64 字节，要求回读 SNR >20 dB、峰值通过检查。实际编码参数和校准值写入本地 manifest。源码与发布包均不含音频。
+
+私有测试可逐个调用导入工具，再用 `tools/deploy.py --profile <id> --validate-only --asset-root <输出根目录> --game-root <目标游戏>` 验证；仅检查选中 profile 和所需回退资源。`host-image-tests.exe` 最后可附加 profile INI 路径，验证独立阶段策略的挂钩安装/还原。CI 使用生成数据验证 SSP 边界、ADPCM 尾块/短块及阶段切换，不需要旧游戏文件。

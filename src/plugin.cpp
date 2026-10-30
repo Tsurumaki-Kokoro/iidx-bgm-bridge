@@ -248,11 +248,15 @@ static bool configure(HMODULE game) {
     if(!controllerEnabled){id=fallbackId;}
     try {selectProfile(id,day);}
     catch(const std::exception& e){logLine(e.what(),true);if(id==fallbackId)throw;selectProfile(fallbackId,day);}
-    if(!controllerEnabled){activeProfile.strategy=bgm::Strategy::Original;}
+    if(!controllerEnabled){
+        if(activeProfile.strategy==bgm::Strategy::Staged)throw std::runtime_error("staged tracks require the playback controller");
+        activeProfile.strategy=bgm::Strategy::Original;
+    }
     if(!bgmhost::install(game,activeProfile,loopFiles(),logLine)){
         auto next=activeProfile.fallback.empty()?fallbackId:activeProfile.fallback;
         logLine("profile controller unavailable; selecting complete-mix fallback",true);
         bgmhost::stop();selectProfile(next,day);
+        if(activeProfile.strategy==bgm::Strategy::Staged)throw std::runtime_error("staged fallback requires unavailable playback hooks");
         activeProfile.strategy=bgm::Strategy::Original;
     }
     logLine(("selected profile="+activeProfile.id+" variant="+activeVariant+"; fixed until restart").c_str());

@@ -42,7 +42,10 @@ def process_names():
 def validate(game, asset_root=None, selected="sinobuz24"):
     asset_root = asset_root or game
     family, build = detect(game)
-    required = {'sinobuz24', 'sinobuz24_compat'} if selected == 'sinobuz24' else {selected}
+    required = {selected}
+    selection = configparser.ConfigParser(); selection.read(PROJECT/'profiles'/f'{selected}.ini', encoding='utf-8')
+    fallback = selection.get('profile', 'fallback', fallback='')
+    if fallback: required.add(fallback)
     if not (PROJECT/'profiles'/f'{selected}.ini').is_file(): raise ValueError('unknown profile')
     count = 0
     for profile in sorted((PROJECT / 'profiles').glob('*.ini')):
@@ -62,7 +65,8 @@ def validate(game, asset_root=None, selected="sinobuz24"):
                 count += 1
             if ini['playback']['strategy'] == 'layered_sync':
                 for variant in (0, 1):
-                    headers = [(asset_root / f'data/sound/system/bgm_bridge/sinobuz24/layered/{day}/{variant}/syssd_bgm_default_l{i}.sd9').read_bytes()[:122] for i in range(3)]
+                    loop_root = ini['profile']['resource_root'].replace('{day}', day).lstrip('/')
+                    headers = [(asset_root / loop_root / f'{variant}/syssd_bgm_default_l{i}.sd9').read_bytes()[:122] for i in range(3)]
                     if not len({(h[20:29], h[110:114]) for h in headers}) == 1:
                         raise ValueError('stem loops differ')
                     for h in headers:
@@ -78,7 +82,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--game-root', type=Path, required=True)
     ap.add_argument('--validate-only', action='store_true')
-    ap.add_argument('--profile', choices=['sinobuz24', 'sinobuz24_compat', 'sparkle33'])
+    ap.add_argument('--profile', choices=sorted(p.stem for p in (PROJECT/'profiles').glob('*.ini')))
     ap.add_argument('--asset-root', type=Path, help='Alternate asset tree for validation only')
     args = ap.parse_args()
     game = args.game_root.resolve()
@@ -111,7 +115,8 @@ def main():
     if args.profile or 'profile' not in ini['bgm_bridge']:
         ini['bgm_bridge']['profile'] = selected
     if args.profile or 'fallback_profile' not in ini['bgm_bridge']:
-        ini['bgm_bridge']['fallback_profile'] = 'sinobuz24_compat' if selected == 'sinobuz24' else selected
+        selection = configparser.ConfigParser(); selection.read(PROJECT/'profiles'/f'{selected}.ini', encoding='utf-8')
+        ini['bgm_bridge']['fallback_profile'] = selection.get('profile','fallback',fallback=selected)
     for key, value in [('enabled', '1'), ('weekday', 'auto'), ('smooth_transition', '1')]:
         if key not in ini['bgm_bridge']:
             ini['bgm_bridge'][key] = value

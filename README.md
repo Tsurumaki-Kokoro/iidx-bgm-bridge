@@ -4,10 +4,11 @@
 
 A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 33 and 34. The included SINOBUZ profile selects one of seven daily arrangements and keeps its three stems synchronized across menu transitions.
 
-**No game executables or audio are included.** Generate runtime audio locally from your own IIDX 24 or 33 audio and a supported IIDX 33/34 installation. The importer does not download game data.
+**No game executables or audio are included.** Generate runtime audio locally from your own IIDX 18–24 or 33 audio and a supported IIDX 33/34 installation. The importer does not download game data.
 
 ## Features
 
+- IIDX 18–23 audio, including both PENDUAL PRESENT and FUTURE arrangements.
 - Seven daily SINOBUZ arrangements, or a fixed weekday selection.
 - Sparkle Shower audio with its original selection intro and loop boundaries.
 - Continuous three-stem playback with configurable stage levels and fades.
@@ -23,7 +24,7 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 33 a
 | OS | Windows x64 |
 | Host | Supported IIDX 33/34 builds listed below |
 | Loader | Spice2x with Spice SDK plugin support and the `-k` DLL option |
-| Audio input | IIDX 24 `data/sound/system/0` or IIDX 33 `data/sound/system`, plus the target installation |
+| Audio input | Local IIDX 18–24 or 33 resources (see below), plus the target installation |
 | Python | Not required for the release ZIP; required when building from source |
 
 ### Supported DLL game versions
@@ -37,6 +38,30 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 33 a
 - `2026081900`
 
 ### Supported audio resource versions
+
+**beatmania IIDX 18 Resort Anthem**
+
+- `2011071200`
+
+**beatmania IIDX 19 Lincle**
+
+- `2012062500`
+
+**beatmania IIDX 20 tricoro**
+
+- `2013090900`
+
+**beatmania IIDX 21 SPADA**
+
+- `2014071600`
+
+**beatmania IIDX 22 PENDUAL**
+
+- `2015080500`
+
+**beatmania IIDX 23 copula**
+
+- `2016083100`
 
 **beatmania IIDX 24 SINOBUZ**
 
@@ -66,7 +91,7 @@ Other executable revisions are rejected. Custom BGM and forced special states co
 
 1. Close the game. Download and extract the Windows ZIP from [Releases](https://github.com/Tsurumaki-Kokoro/iidx-bgm-bridge/releases), then copy its contents into the target IIDX 33/34 root directory. Do not use GitHub's source-code ZIP as the binary package.
 2. Copy `modules/bgm_bridge.example.ini` to `modules/bgm_bridge.ini`. Updates ship an example file so your existing configuration is not overwritten.
-3. Run `tools/import-resources.exe`. Choose `sinobuz24` or `sparkle33`, then enter the audio source and target game root. For Sparkle Shower use IIDX 33’s `data/sound/system` directory. Importing may take a while. The selected resource set is fully prepared and validated before installation.
+3. Run `tools/import-resources.exe`. Choose an audio profile, then enter the source path and target game root. For Sparkle Shower use IIDX 33’s `data/sound/system` directory. Importing may take a while. The selected resource set is fully prepared and validated before installation.
 4. Add `-k bgm_bridge.dll` to your existing Spice2x launch command, preserving its other options. For example, append that argument to the command you already use. The plugin DLL belongs in `modules/`.
 5. Start the game. Check `bgm_bridge.log` in the game root if the profile is not active.
 
@@ -86,6 +111,28 @@ Then set `profile=sparkle33` and `fallback_profile=sparkle33` in the main INI. I
 
 Generated files are placed under `data/sound/system/bgm_bridge/<profile>/`. Reimporting preserves the previous set in a sibling `<profile>.backup-*` directory. Use `--output-root` to generate a separate tree for inspection instead of installing the resources into the game directory. Close the game before importing.
 
+## IIDX 18–23 audio
+
+| Profile | Audio | Playback |
+| --- | --- | --- |
+| `resort18` | IIDX 18 Resort Anthem | SSP / independent stage tracks |
+| `lincle19` | IIDX 19 Lincle | SSP / independent stage tracks |
+| `tricoro20` | IIDX 20 tricoro | Synchronized stems |
+| `spada21` | IIDX 21 SPADA | Synchronized stems |
+| `pendual22` | IIDX 22 PENDUAL PRESENT | Synchronized stems |
+| `pendual22_future` | IIDX 22 PENDUAL FUTURE | Synchronized stems |
+| `copula23` | IIDX 23 copula | Synchronized stems |
+
+For 18/19, select the source game root, its `sys_sd` directory, or `sys_sound.ssp`. The importer reads the original SSP directly; no external extraction tool is required. For 20–23, select the source game root or `data/sound/system`.
+
+```bat
+tools\import-resources.exe --profile tricoro20 --source-root "D:\IIDX20" --game-root "D:\IIDX34"
+```
+
+Set `profile=tricoro20` and `fallback_profile=tricoro20_compat` in the main INI. For other 20–23 profiles, use the matching `<profile>_compat` fallback. For 18/19, set both profile fields to the same ID (for example `resort18`) and keep `smooth_transition=1`: independent stage tracks require the playback controller. If that controller cannot initialize, the plugin leaves the game's original audio active rather than overlapping unrelated tracks.
+
+18/19 retain their original intros and loop boundaries and crossfade between independent entry, mode and selection tracks. Their music-confirmation sound is imported; the host's card-out sound is retained. 20–23 keep synchronized source stems for default menus and render complete mixes for standalone selection modes. Only PENDUAL's explicit FUTURE profile uses the `_02` resources; inherited files from older games are not selected as copula arrangements. These additions provide audio profiles, not support for running IIDX 18–23 as hosts.
+
 ## Configuration
 
 Edit `modules/bgm_bridge.ini`:
@@ -102,7 +149,7 @@ smooth_transition=1
 | Setting | Values / behavior |
 | --- | --- |
 | `enabled` | `0` disables the plugin; `1` enables it |
-| `profile` | `sinobuz24` for synchronized stems; `sinobuz24_compat` for complete mixes; `sparkle33` for Sparkle Shower |
+| `profile` | `sinobuz24` for synchronized stems; `sinobuz24_compat` for complete mixes; `sparkle33` for Sparkle Shower; see above for 18–23 |
 | `fallback_profile` | Profile selected if the requested profile or its assets cannot load |
 | `weekday` | `auto`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
 | `smooth_transition` | `1` enables the selected controller; `0` selects fallback assets with original host scheduling |

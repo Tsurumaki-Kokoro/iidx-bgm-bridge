@@ -92,6 +92,17 @@ int main(){try{
     require(!bgm::supportsHost(native,"iidx32","iidx32-unknown"),"unlisted hosts rejected");
     auto sparkle=bgm::loadProfile(L"profiles/sparkle33.ini");
     require(sparkle.strategy==bgm::Strategy::Original&&sparkle.schedule=="fixed","Sparkle keeps native intro-loop scheduling");
+    auto resort=bgm::loadProfile(L"profiles/resort18.ini");
+    Audio stageAudio;bgm::Playback staged(resort,stageAudio,0);c={};c.owner=&stageAudio;
+    staged.target(c,0,0);stageAudio.time+=resort.fadeMs;
+    require(staged.target(c,0,0)==62,"independent entry track");
+    c.state=1;c.applied={62,0,0,0};staged.target(c,0,0);stageAudio.time+=resort.fadeMs;
+    require(staged.target(c,0,0)==0&&staged.target(c,1,0)==62,"mode track replaces entry track");
+    c.state=2;c.applied={0,62,0,0};result=staged.advance(c);
+    require(result.handled&&result.mask==2&&stageAudio.starts==1&&stageAudio.seeks==0,"legacy selection starts independently without phase seek");
+    c.mask=2;staged.target(c,0,0);stageAudio.time+=resort.fadeMs;staged.advance(c);
+    require(staged.target(c,1,0)==0&&staged.target(c,2,0)==62&&stageAudio.starts==1,"selection steady without restart or menu overlap");
+    c.custom=true;require(staged.target(c,2,27)==27&&!staged.advance(c).handled,"legacy custom BGM bypass");
     detourTest();
     hostAdapterTest(native);
     std::cout<<"PASS: profiles/schema/path validation, fixed and weekday layouts, layered stages, muted-stem sync/no restart, host-state adaptation, fullmix fallback, custom/forced bypass and real detours\n";

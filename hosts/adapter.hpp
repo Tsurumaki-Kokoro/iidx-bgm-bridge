@@ -98,7 +98,8 @@ inline bool install(HMODULE game,const bgm::Profile& profile,const std::vector<s
     if(profile.strategy==bgm::Strategy::Original)return true;
     if(loops.size()!=3)return false;
     double duration=0;
-    for(auto& file:loops){double d=readLoop(file);if(d<=0||(duration&&std::abs(duration-d)>.001))return false;duration=d;}
+    if(profile.strategy!=bgm::Strategy::Staged)
+        for(auto& file:loops){double d=readLoop(file);if(d<=0||(duration&&std::abs(duration-d)>.001))return false;duration=d;}
     auto base=reinterpret_cast<unsigned char*>(game);
     const unsigned char a[]={0x40,0x53,0x48,0x83,0xEC,0x20},t[]={0x48,0x89,0x5C,0x24,0x08,0x57};
     if(memcmp(base+supported.advance,a,sizeof(a))||memcmp(base+supported.target,t,sizeof(t)))return false;

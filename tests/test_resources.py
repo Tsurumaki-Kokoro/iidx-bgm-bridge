@@ -10,6 +10,7 @@ import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
 import import_resources as importer
+from legacy_audio import SspBank, SPECS, adpcm_template
 
 def template(frames):
     coefficients=[(256,0),(512,-256),(0,0),(192,64),(240,0),(460,-208),(392,-232)]
@@ -22,10 +23,29 @@ def template(frames):
     return data
 
 class Resources(unittest.TestCase):
+    def test_ssp_table_lookup_and_bounds(self):
+        sound=template(1001);struct.pack_into('<H',sound,30,14)
+        bank=bytearray(80072)+sound;bank[:13]=b'sys_sound.ssp'
+        struct.pack_into('<I',bank,16,80072);struct.pack_into('<I',bank,72+14*320+11*4,80072)
+        reader=SspBank(bank)
+        self.assertEqual(reader.entry(14,11),sound)
+        for group,index in [(250,0),(14,80),(14,0)]:
+            with self.assertRaises(ValueError):reader.entry(group,index)
+        with self.assertRaises(ValueError):SspBank(bank[:-20]).entry(14,11)
+        corrupt=bytearray(bank);struct.pack_into('<H',corrupt,80072+30,15)
+        with self.assertRaises(ValueError):SspBank(corrupt).entry(14,11)
+
+    def test_all_legacy_profiles_and_fallbacks_exist(self):
+        for profile,spec in SPECS.items():
+            ini=configparser.ConfigParser(interpolation=None);ini.read(ROOT/f'profiles/{profile}.ini')
+            self.assertEqual(ini['profile']['schedule'],'fixed')
+            self.assertEqual(ini['playback']['strategy'],'staged_tracks' if spec.get('bank') else 'layered_sync')
+            if not spec.get('bank'):self.assertTrue((ROOT/f'profiles/{profile}_compat.ini').is_file())
+
     def test_profiles_are_self_contained(self):
         for path in (ROOT/'profiles').glob('*.ini'):
             ini=configparser.ConfigParser(interpolation=None);ini.read(path)
-            self.assertEqual(len(ini['map']),31)
+            self.assertEqual(len(ini['map']),29 if path.stem in ('resort18','lincle19') else 31)
             for target in ini['map'].values():
                 full=target if target.startswith('/') else ini['profile']['resource_root']+'/'+target
                 self.assertTrue(full.startswith('/data/sound/system/bgm_bridge/'))
@@ -64,6 +84,18 @@ class Resources(unittest.TestCase):
             snr=10*np.log10(np.mean(tone**2)/np.mean((tone-decoded)**2))
             self.assertGreater(snr,20)
             self.assertEqual(struct.unpack_from('<I',(work/'encoded.sd9').read_bytes(),110)[0],frames)
+
+    def test_short_adpcm_blocks_preserve_frames(self):
+        with tempfile.TemporaryDirectory(dir=ROOT/'build') as directory:
+            work=Path(directory);frames=1001;source=work/'template.sd9'
+            source.write_bytes(adpcm_template(template(frames),128))
+            tone=np.repeat((.2*np.sin(np.arange(frames)*2*np.pi*440/44100))[:,None],2,axis=1).ravel()
+            (tone*32767).round().astype('<i2').tofile(work/'tone.pcm')
+            importer.run(ROOT/'build/audio_codec.exe','encode',source,work/'tone.pcm',work/'encoded.sd9')
+            data,decoded=importer.decode(work/'encoded.sd9',work/'decoded.pcm')
+            self.assertEqual(len(decoded),len(tone))
+            self.assertEqual(struct.unpack_from('<H',data,64)[0],128)
+            self.assertGreater(10*np.log10(np.mean(tone**2)/np.mean((tone-decoded)**2)),20)
 
     def test_reject_invalid_sd9(self):
         with tempfile.TemporaryDirectory(dir=ROOT/'build') as directory:
