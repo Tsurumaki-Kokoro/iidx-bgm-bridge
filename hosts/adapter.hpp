@@ -3,6 +3,7 @@
 #include <memory>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include "../include/playback.hpp"
 #include "../vendor/minhook/include/MinHook.h"
 
@@ -11,9 +12,46 @@
 namespace bgmhost {
 // All executable-specific knowledge is confined to this adapter.
 inline Spec supported=iidx34;
-inline bool select(const std::string& hash){
-    for(const auto& candidate:builds)if(hash==candidate.sha256){supported=candidate;return true;}
+inline bool select(const std::string& version){
+    for(const auto& candidate:builds)if(version==candidate.version||(!version.empty()&&version==candidate.versionAlias)){supported=candidate;return true;}
     return false;
+}
+inline bool validLayout(HMODULE game){
+    if(!game)return false;
+    auto base=reinterpret_cast<const unsigned char*>(game);
+    auto dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if(dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<0x40||dos->e_lfanew>0x1000)return false;
+    auto nt=reinterpret_cast<const IMAGE_NT_HEADERS64*>(base+dos->e_lfanew);
+    if(nt->Signature!=IMAGE_NT_SIGNATURE||nt->FileHeader.Machine!=IMAGE_FILE_MACHINE_AMD64||
+       nt->OptionalHeader.Magic!=IMAGE_NT_OPTIONAL_HDR64_MAGIC||!nt->FileHeader.NumberOfSections||
+       nt->FileHeader.NumberOfSections>96)return false;
+    auto executable=[&](uintptr_t rva,size_t length){
+        if(rva>=nt->OptionalHeader.SizeOfImage||length>nt->OptionalHeader.SizeOfImage-rva)return false;
+        auto section=IMAGE_FIRST_SECTION(nt);
+        for(unsigned i=0;i<nt->FileHeader.NumberOfSections;++i){
+            uint64_t end=static_cast<uint64_t>(section[i].VirtualAddress)+std::max(section[i].Misc.VirtualSize,section[i].SizeOfRawData);
+            if((section[i].Characteristics&IMAGE_SCN_MEM_EXECUTE)&&rva>=section[i].VirtualAddress&&rva+length<=end)return true;
+        }
+        return false;
+    };
+    auto matches=[&](uintptr_t rva,std::initializer_list<unsigned char> bytes){
+        return executable(rva,bytes.size())&&memcmp(base+rva,bytes.begin(),bytes.size())==0;
+    };
+    auto call=[&](uintptr_t site,uintptr_t target){
+        if(!executable(site,5)||base[site]!=0xe8)return false;
+        int32_t displacement=0;memcpy(&displacement,base+site+1,4);
+        return static_cast<int64_t>(site)+5+displacement==static_cast<int64_t>(target);
+    };
+    return matches(supported.advance,{0x40,0x53,0x48,0x83,0xec,0x20})&&
+        matches(supported.target,{0x48,0x89,0x5c,0x24,0x08,0x57})&&
+        matches(supported.lookup,{0x40,0x53,0x48,0x83,0xec,0x20,0x48,0x63})&&
+        matches(supported.playing,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74})&&
+        matches(supported.volume,{0x48,0x89,0x5c,0x24,0x08,0x57})&&
+        matches(supported.custom,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74})&&
+        matches(supported.customSecondary,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74})&&
+        executable(supported.play,6)&&base[supported.play]==0xba&&base[supported.play+5]==0xe9&&
+        call(supported.advance+0x23,supported.playing)&&call(supported.advance+0x4c,supported.play)&&
+        call(supported.advance+0x73,supported.playing);
 }
 using Logger=void(*)(const char*,bool);
 using Advance=void(__cdecl*)(void*);
@@ -95,6 +133,7 @@ inline void stop(){
 inline bool install(HMODULE game,const bgm::Profile& profile,const std::vector<std::wstring>& loops,Logger log){
     logger=log;
     if(!bgm::supportsHost(profile,supported.family,supported.id))return false;
+    if(!validLayout(game))return false;
     if(profile.strategy==bgm::Strategy::Original)return true;
     if(loops.size()!=3)return false;
     double duration=0;

@@ -55,9 +55,37 @@ class Resources(unittest.TestCase):
         from host_support import builds
         header=(ROOT/'hosts/builds.hpp').read_text()
         for family,info in builds().items():
-            self.assertIn(info['sha256'],header)
             self.assertIn(info['version'],header)
+            for alias in info.get('aliases',[]):self.assertIn(alias,header)
             self.assertIn('"'+family+'"',header)
+            self.assertNotIn('sha256',info)
+
+    def test_version_detection_accepts_patched_dll(self):
+        from host_support import detect
+        with tempfile.TemporaryDirectory(dir=ROOT/'build') as directory:
+            game=Path(directory);(game/'prop').mkdir();(game/'modules').mkdir()
+            dll=game/'modules/bm2dx.dll';dll.write_bytes(b'original fixture')
+            (game/'prop/ea3-config.xml').write_text('<ea3><model>LDJ</model><ext>2025090300</ext></ea3>')
+            bootstrap=game/'prop/bootstrap.xml'
+            bootstrap.write_text('<config><!-- <release_code>2000010100</release_code> --><release_code>2026081900</release_code></config>')
+            self.assertEqual(detect(game)[0],'iidx33')
+            dll.write_bytes(b'patched fixture with different size and content')
+            self.assertEqual(detect(game)[0],'iidx33')
+            bootstrap.write_text('<config><release_code>2026091700</release_code></config>')
+            self.assertEqual(detect(game)[0],'iidx34')
+            bootstrap.write_text('<config><release_code>2026091600</release_code></config>')
+            self.assertEqual(detect(game)[1]['version'],'2026091600')
+            bootstrap.write_text('<config><release_code>2099010100</release_code></config>')
+            with self.assertRaises(ValueError):detect(game)
+            bootstrap.write_text('<config><release_code>invalid</release_code></config>')
+            with self.assertRaises(ValueError):detect(game)
+            bootstrap.write_text('<config><release_code>2026081900</release_code><release_code>2026091700</release_code></config>')
+            with self.assertRaises(ValueError):detect(game)
+            bootstrap.unlink()
+            (game/'prop/ea3-config.xml').write_text('<ea3><model>LDJ</model><ext>2026081900</ext></ea3>')
+            self.assertEqual(detect(game)[0],'iidx33')
+            (game/'prop/ea3-config.xml').write_text('<ea3><model>KFC</model><ext>2026081900</ext></ea3>')
+            with self.assertRaises(ValueError):detect(game)
 
     def test_intro_loop_is_preserved(self):
         source=template(1001);struct.pack_into('<II',source,20,400,4004)

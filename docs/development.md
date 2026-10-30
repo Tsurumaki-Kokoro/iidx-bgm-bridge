@@ -44,7 +44,7 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 | `src/plugin.cpp` | SDK lifecycle, INI loading, resource redirection and fallback |
 | `include/playback.hpp` | Host-independent synchronization and level transitions |
 | `include/profile.hpp` | Profile schema and validation |
-| `hosts/adapter.hpp + hosts/builds.hpp` | Build hash, addresses, state translation and audio calls |
+| `hosts/adapter.hpp + hosts/builds.hpp` | Game version, addresses, state translation and audio calls |
 | `profiles/` | BGM resource routes and playback parameters |
 | `tools/` | Local importing, codec, metering, deployment and audio-free packaging |
 | `tests/` | Synthetic audio tests and playback/detour tests |
@@ -59,7 +59,7 @@ Use an existing profile as the complete example. Profiles are installed in `modu
 - `[levels]`: layered/staged profiles require `state0` through `state3`, each with four comma-separated finite values in 0–127. Unused layers must be zero. Slots correspond to the host adapter's logical default BGM slots. The SINOBUZ profile maps the host's final state to three stems, keeping slot 3 muted.
 - `[map]`: keys are paths relative to `/data/sound/system/`. Values are relative to `resource_root` or absolute virtual paths under `/data/sound/system/`. Traversal and Windows filesystem paths are rejected. There must be 1–128 mappings.
 
-The shared IIDX 33/34 adapter selects a compiled address table by executable SHA-256 and requires three default-loop routes for controlled strategies. Layered/crossfade strategies accept 44.1 kHz loops starting at zero, with matching frame counts and full-length boundaries; staged tracks retain independent lengths and nonzero loop starts. `original` does not require the playback hooks. Additional arrangements using the same three-stem model can use new profiles. Segmented transitions, more stems or additional events require a new strategy; a different host build requires an adapter with verified addresses and guards.
+The shared IIDX 33/34 adapter selects a compiled address table by the ten-digit game version and requires three default-loop routes for controlled strategies. Layered/crossfade strategies accept 44.1 kHz loops starting at zero, with matching frame counts and full-length boundaries; staged tracks retain independent lengths and nonzero loop starts. `original` does not require the playback hooks. Additional arrangements using the same three-stem model can use new profiles. Segmented transitions, more stems or additional events require a new strategy; a different host build requires an adapter with verified addresses and guards.
 
 ## Audio preparation
 
@@ -81,13 +81,13 @@ Keep English and Chinese documents aligned. Keep host-specific addresses out of 
 
 `sparkle33` uses fixed/original scheduling on both IIDX 33 and 34, retaining both original audio variants and l2's intro/nonzero loop start. Import changes only the destination loop count, pan and sound ID; source gain, loop range and compressed payload remain intact. Use `--profile sparkle33 --source-root "D:\IIDX33\data\sound\system"` to import, and `--profile sparkle33` for validation/deployment. SINOBUZ resources are not required for this profile.
 
-`hosts/builds.hpp` contains addresses and hashes; `tools/host_builds.json` supplies the same build registry to tools. Tests check their consistency. The verified IIDX 33 installation uses release code 2026081900. Support is restricted to the exact listed executable hash; editing a property version does not add DLL support.
+`hosts/builds.hpp` contains supported versions and addresses; `tools/host_builds.json` supplies the same version registry to tools. Tests check their consistency. IIDX 33 uses release code 2026081900; the verified IIDX 34 installation uses 2026091700 (the previously documented 2026091600 label remains accepted with the same mandatory audio-layout checks). Runtime identification prefers `prop/bootstrap.xml` release_code, then Spice SDK AVS ext, then `prop/ea3-config.xml` ext. Offline tools use bootstrap, then ea3. Whole-DLL hashes are not admission criteria. Both paths reject invalid, duplicate or unsupported version values and non-LDJ models. The runtime separately checks PE architecture, executable sections, audio entry points and call targets; unrelated patches are allowed, but incompatible audio-layout patches are rejected.
 
-`build/host-image-tests.exe` is an optional private test taking a host family, game DLL and three generated SINOBUZ stem paths. It maps the DLL with DONT_RESOLVE_DLL_REFERENCES, installs and restores real playback hooks, without resolving game dependencies or executing the entry point/game functions. Run it only on local DLLs whose hashes were verified. It does not replace in-game tests.
+`build/host-image-tests.exe` is an optional private test taking a host family, game DLL and three generated SINOBUZ stem paths. It maps the DLL with DONT_RESOLVE_DLL_REFERENCES, installs and restores real playback hooks, without resolving game dependencies or executing the entry point/game functions. Run it only on local DLLs matching the supported version and audio layout. It does not replace in-game tests.
 
 ## IIDX 18–23 audio adapters
 
-`tools/legacy_audio.py` contains source rules; the host hash registry still contains only 33/34. SSP uses a 72-byte prefix followed by 250 groups of 80 uint32 offsets. Readers check the header, indices, entry bounds, SD9 layout and sound ID. Default selection is group 14 variant 1; mode selection is variant 0; card entry is variant 11 for 18 and variant 8 for 19. Confirmation is group 20 variant 0. These indices were checked against the corresponding executable name tables, rather than guessed from audio scans.
+`tools/legacy_audio.py` contains source rules; the host version registry still contains only 33/34. SSP uses a 72-byte prefix followed by 250 groups of 80 uint32 offsets. Readers check the header, indices, entry bounds, SD9 layout and sound ID. Default selection is group 14 variant 1; mode selection is variant 0; card entry is variant 11 for 18 and variant 8 for 19. Confirmation is group 20 variant 0. These indices were checked against the corresponding executable name tables, rather than guessed from audio scans.
 
 18/19 use `staged_tracks` to fade between independent entry/mode/selection tracks. Selection starts from the beginning without cross-track phase seeking; equal loop lengths are not required. Source loops and compressed payload are retained while stage gains are calibrated to the host reference and checked for sample peaks. This strategy cannot fall back to native scheduling without its controller; initialization failure retains host audio. No separate legacy card-out mapping is provided, so that sound remains unchanged.
 

@@ -13,7 +13,7 @@ add_library(minhook STATIC vendor/minhook/src/buffer.c vendor/minhook/src/hook.c
   vendor/minhook/src/trampoline.c vendor/minhook/src/hde/hde64.c)
 add_library(bgm_bridge SHARED src/plugin.cpp)
 target_include_directories(bgm_bridge PRIVATE include)
-target_link_libraries(bgm_bridge PRIVATE minhook bcrypt)
+target_link_libraries(bgm_bridge PRIVATE minhook)
 add_executable(bgm-tests tests/test_core.cpp)
 target_include_directories(bgm-tests PRIVATE include)
 target_link_libraries(bgm-tests PRIVATE minhook)

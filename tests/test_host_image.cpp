@@ -4,7 +4,9 @@
 #define NOMINMAX
 #include <windows.h>
 #include <iostream>
+#include <filesystem>
 #include "../hosts/adapter.hpp"
+#include "../include/host_version.hpp"
 static void log(const char* text,bool){std::cout<<text<<'\n';}
 int wmain(int argc,wchar_t** argv){
     if(argc!=6&&argc!=7){std::cerr<<"family game.dll l0.sd9 l1.sd9 l2.sd9 [profile.ini]\n";return 2;}
@@ -14,6 +16,13 @@ int wmain(int argc,wchar_t** argv){
         if(family==argv[1]){bgmhost::supported=spec;found=true;break;}
     }
     if(!found)return 2;
+    try{
+        auto root=std::filesystem::path(argv[2]).parent_path().parent_path();
+        auto detected=bgm::resolveHostVersion(bgm::metadataText((root/L"prop/bootstrap.xml").wstring()),bgm::metadataText((root/L"prop/ea3-config.xml").wstring()));
+        auto family=std::string(bgmhost::supported.family);
+        if(!bgmhost::select(detected.version)||family!=bgmhost::supported.family){std::cerr<<"Host family/version mismatch\n";return 1;}
+        std::cout<<"version="<<detected.version<<" source="<<detected.source<<'\n';
+    }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
     auto game=LoadLibraryExW(argv[2],nullptr,DONT_RESOLVE_DLL_REFERENCES);
     if(!game){std::cerr<<"Cannot map game DLL: "<<GetLastError()<<'\n';return 1;}
     auto profile=bgm::loadProfile(argc==7?argv[6]:L"profiles/sinobuz24.ini");

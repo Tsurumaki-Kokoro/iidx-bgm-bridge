@@ -1,7 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
-#include <bcrypt.h>
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
@@ -12,6 +11,7 @@
 #include <stdexcept>
 #include "spicesdk.h"
 #include "../hosts/adapter.hpp"
+#include "host_version.hpp"
 
 static constexpr const char* kDays[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
 static bgm::Profile activeProfile;
@@ -92,32 +92,6 @@ static int __cdecl hookedStat(const char* path, void* stat) {
         if (result >= 0) return result;
     }
     return originalStat(path, stat);
-}
-
-static std::string fileHash(const std::wstring& path) {
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE |
-                              FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return {};
-    BCRYPT_ALG_HANDLE algorithm = nullptr;
-    BCRYPT_HASH_HANDLE hash = nullptr;
-    std::array<unsigned char, 32> digest{};
-    bool ok = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) >= 0;
-    if (ok) ok = BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) >= 0;
-    unsigned char buffer[65536];
-    DWORD count = 0;
-    while (ok) {
-        if (!ReadFile(file, buffer, sizeof(buffer), &count, nullptr)) { ok = false; break; }
-        if (!count) break;
-        ok = BCryptHashData(hash, buffer, count, 0) >= 0;
-    }
-    if (ok) ok = BCryptFinishHash(hash, digest.data(), static_cast<ULONG>(digest.size()), 0) >= 0;
-    if (hash) BCryptDestroyHash(hash);
-    if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
-    CloseHandle(file);
-    if (!ok) return {};
-    char result[65]{};
-    for (size_t i = 0; i < digest.size(); ++i) sprintf_s(result + i * 2, 3, "%02x", digest[i]);
-    return result;
 }
 
 static IMAGE_NT_HEADERS64* headers(HMODULE module) {
@@ -224,8 +198,20 @@ static bool configure(HMODULE game) {
     if (!GetPrivateProfileIntW(L"bgm_bridge", L"enabled", 1, ini.c_str())) {
         logLine("disabled by bgm_bridge.ini"); return false;
     }
-    if (!bgmhost::select(fileHash(gamePath))) {
-        logLine("unsupported bm2dx.dll SHA256; no hooks installed", true); return false;
+    SPICE_SDK_AVS_INFO info{};
+    std::string model,runtimeVersion;
+    if(sdk.get_avs_info&&sdk.get_avs_info(&info)==SPICE_SDK_STATUS_SUCCESS){
+        model.assign(info.model,strnlen_s(info.model,sizeof(info.model)));
+        runtimeVersion.assign(info.ext,strnlen_s(info.ext,sizeof(info.ext)));
+    }
+    auto detected=bgm::resolveHostVersion(bgm::metadataText(root+L"prop\\bootstrap.xml"),
+                                          bgm::metadataText(root+L"prop\\ea3-config.xml"),model,runtimeVersion);
+    if (!bgmhost::select(detected.version)) {
+        logLine(("unsupported host version="+detected.version).c_str(),true);return false;
+    }
+    logLine(("host version="+detected.version+" source="+detected.source).c_str());
+    if(!bgmhost::validLayout(game)){
+        logLine("host audio layout does not match this version; no hooks installed",true);return false;
     }
     wchar_t value[32];
     GetPrivateProfileStringW(L"bgm_bridge", L"weekday", L"auto", value, std::size(value), ini.c_str());
@@ -285,6 +271,8 @@ extern "C" __declspec(dllexport) int __cdecl spice_sdk_entry_point(spice_sdk_ini
         }
         logLine((std::string("ready: profile-driven BGM engine; host=")+bgmhost::supported.id).c_str());
         return 0;
+    } catch (const std::exception& error) {
+        destroy();logLine((std::string("initialization failed; hooks rolled back: ")+error.what()).c_str(),true);return 1;
     } catch (...) { destroy(); logLine("initialization failed; hooks rolled back", true); return 1; }
 }
 BOOL WINAPI DllMain(HINSTANCE, DWORD, LPVOID) { return TRUE; }

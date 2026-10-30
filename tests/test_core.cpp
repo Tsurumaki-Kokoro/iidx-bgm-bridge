@@ -6,6 +6,7 @@
 #include "playback.hpp"
 #include "../vendor/minhook/include/MinHook.h"
 #include "../hosts/adapter.hpp"
+#include "host_version.hpp"
 static void require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 struct Audio final:bgm::Engine {
     uint64_t time=1000;std::array<bool,4> running{true,true,false,false};
@@ -26,11 +27,30 @@ static void hostAdapterTest(const bgm::Profile& profile){
     const unsigned char target[]={0x48,0x89,0x5c,0x24,0x08,0x57};
     auto image=static_cast<unsigned char*>(VirtualAlloc(nullptr,0xB00000,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
     require(image!=nullptr,"host fixture allocation");
+    auto dos=reinterpret_cast<IMAGE_DOS_HEADER*>(image);dos->e_magic=IMAGE_DOS_SIGNATURE;dos->e_lfanew=0x80;
+    auto nt=reinterpret_cast<IMAGE_NT_HEADERS64*>(image+0x80);nt->Signature=IMAGE_NT_SIGNATURE;
+    nt->FileHeader.Machine=IMAGE_FILE_MACHINE_AMD64;nt->FileHeader.NumberOfSections=1;
+    nt->FileHeader.SizeOfOptionalHeader=sizeof(IMAGE_OPTIONAL_HEADER64);
+    nt->OptionalHeader.Magic=IMAGE_NT_OPTIONAL_HDR64_MAGIC;nt->OptionalHeader.SizeOfImage=0xB00000;
+    auto section=IMAGE_FIRST_SECTION(nt);section->VirtualAddress=0x1000;section->Misc.VirtualSize=0xAFF000;section->Characteristics=IMAGE_SCN_MEM_EXECUTE|IMAGE_SCN_MEM_READ;
+    auto copy=[&](uintptr_t rva,std::initializer_list<unsigned char> bytes){memcpy(image+rva,bytes.begin(),bytes.size());};
+    auto call=[&](uintptr_t site,uintptr_t targetRva){image[site]=0xe8;int32_t delta=static_cast<int32_t>(targetRva-site-5);memcpy(image+site+1,&delta,4);};
     for(const auto& spec:bgmhost::builds){
-        require(bgmhost::select(spec.sha256),"known host hash selected");
-        require(!bgmhost::select(std::string(64,'0')),"unknown host hash rejected");
+        require(bgmhost::select(spec.version),"known host version selected");
+        if(*spec.versionAlias)require(bgmhost::select(spec.versionAlias),"compatible version alias selected");
+        require(!bgmhost::select("2099010100"),"unknown host version rejected");
         memset(image+spec.advance,0x90,32);memset(image+spec.target,0x90,32);
         memcpy(image+spec.advance,advance,sizeof(advance));memcpy(image+spec.target,target,sizeof(target));
+        copy(spec.lookup,{0x40,0x53,0x48,0x83,0xec,0x20,0x48,0x63});
+        for(auto rva:{spec.playing,spec.custom,spec.customSecondary})copy(rva,{0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74});
+        copy(spec.volume,{0x48,0x89,0x5c,0x24,0x08,0x57});copy(spec.play,{0xba,0x32,0,0,0,0xe9});
+        call(spec.advance+0x23,spec.playing);call(spec.advance+0x4c,spec.play);call(spec.advance+0x73,spec.playing);
+        require(bgmhost::validLayout(reinterpret_cast<HMODULE>(image)),"version-specific audio layout accepted");
+        image[0x1000]^=0xff;
+        require(bgmhost::validLayout(reinterpret_cast<HMODULE>(image)),"unrelated DLL patch accepted");
+        image[spec.advance+0x24]^=1;
+        require(!bgmhost::validLayout(reinterpret_cast<HMODULE>(image)),"wrong audio call target rejected");
+        image[spec.advance+0x24]^=1;
         auto logger=+[](const char*,bool){};
         require(bgmhost::install(reinterpret_cast<HMODULE>(image),profile,{L"build/test-loop.sd9",L"build/test-loop.sd9",L"build/test-loop.sd9"},logger),"host adapter accepts real compiler prologues");
         bgmhost::stop();
@@ -40,6 +60,19 @@ static void hostAdapterTest(const bgm::Profile& profile){
         bgmhost::stop();
     }
     VirtualFree(image,0,MEM_RELEASE);
+}
+static void versionTest(){
+    const std::string stale="<ea3><soft><model>LDJ</model><ext>2025090300</ext></soft></ea3>";
+    auto result=bgm::resolveHostVersion("<config><!-- <release_code>2000010100</release_code> --><release_code> 2026081900 </release_code></config>",stale,"LDJ","2025090300");
+    require(result.version=="2026081900"&&result.source=="prop/bootstrap.xml release_code","bootstrap wins over stale runtime and ea3 versions");
+    require(bgm::resolveHostVersion("",stale,"LDJ","2026091700").version=="2026091700","SDK fallback");
+    require(bgm::resolveHostVersion("","<ea3><soft><model>LDJ</model><ext __type=\"str\">2026081900</ext></soft></ea3>").version=="2026081900","ea3 fallback and attributes");
+    for(const auto& bad:std::vector<std::string>{"", "<config><release_code/></config>", "<config><release_code>broken</release_code></config>","<config><release_code>2026081900</release_code><release_code>2026091700</release_code></config>"}){
+        bool rejected=false;try{bgm::resolveHostVersion(bad,"");}catch(const std::exception&){rejected=true;}
+        require(rejected,"invalid host metadata rejected");
+    }
+    bool rejected=false;try{bgm::resolveHostVersion("<config><release_code>2026081900</release_code></config>","<ea3><model>KFC</model></ea3>");}catch(const std::exception&){rejected=true;}
+    require(rejected,"non-IIDX model rejected");
 }
 static void detourTest(){
     auto page=static_cast<unsigned char*>(VirtualAlloc(nullptr,4096,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
@@ -79,7 +112,7 @@ int main(){try{
     c.mask=1;crossAudio.time+=compat.fadeMs/2;
     require(cross.target(c,0,54)==27&&cross.target(c,2,62)==31,"fullmix midpoint");
     crossAudio.time+=compat.fadeMs/2;result=cross.advance(c);require(result.mask==2,"fullmix steady only");
-    auto fixed=std::string("[profile]\nschema=1\nid=other_version\nhost=iidx34-20260916\nresource_root=/data/sound/system/other/{day}\nschedule=fixed\nfixed_variant=default\n[playback]\nstrategy=original\n[map]\n0/test.sd9=0/test.sd9\n");
+    auto fixed=std::string("[profile]\nschema=1\nid=other_version\nhost=iidx34-20260917\nresource_root=/data/sound/system/other/{day}\nschedule=fixed\nfixed_variant=default\n[playback]\nstrategy=original\n[map]\n0/test.sd9=0/test.sd9\n");
     std::istringstream stream(fixed);auto alternate=bgm::parseProfile(stream);
     require(alternate.schedule=="fixed"&&alternate.fixedVariant=="default","non-daily profile");
     for(const auto& invalid:std::vector<std::pair<std::string,std::string>>{{"schema=1","schema=9"},{"id=other_version","id=../bad"},{"strategy=original","strategy=unknown"},{"0/test.sd9=0/test.sd9","0/test.sd9=../../escape.sd9"},{"schedule=fixed","schedule=unknown"}}){
@@ -88,7 +121,7 @@ int main(){try{
         require(rejected,"invalid profile must fail closed");
     }
     require(!bgm::safeId("../x")&&!bgm::safePath("C:/outside")&&!bgm::safePath("../x"),"path validation");
-    require(bgm::supportsHost(native,"iidx33","iidx33-20260819")&&bgm::supportsHost(native,"iidx34","iidx34-20260916"),"shared profile host families");
+    require(bgm::supportsHost(native,"iidx33","iidx33-20260819")&&bgm::supportsHost(native,"iidx34","iidx34-20260917"),"shared profile host families");
     require(!bgm::supportsHost(native,"iidx32","iidx32-unknown"),"unlisted hosts rejected");
     auto sparkle=bgm::loadProfile(L"profiles/sparkle33.ini");
     require(sparkle.strategy==bgm::Strategy::Original&&sparkle.schedule=="fixed","Sparkle keeps native intro-loop scheduling");
@@ -105,6 +138,7 @@ int main(){try{
     c.custom=true;require(staged.target(c,2,27)==27&&!staged.advance(c).handled,"legacy custom BGM bypass");
     detourTest();
     hostAdapterTest(native);
+    versionTest();
     std::cout<<"PASS: profiles/schema/path validation, fixed and weekday layouts, layered stages, muted-stem sync/no restart, host-state adaptation, fullmix fallback, custom/forced bypass and real detours\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<"\n";return 1;}}

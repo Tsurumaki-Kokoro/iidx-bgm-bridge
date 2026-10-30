@@ -31,7 +31,7 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 33 a
 
 **beatmania IIDX 34 ZINRAI**
 
-- `2026091600`
+- `2026091700, 2026091600`
 
 **beatmania IIDX 33 Sparkle Shower**
 
@@ -73,7 +73,9 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 33 a
 
 The resource version identifies the tested source installation. The importer validates the required files and audio layout rather than enforcing that version string. Other game builds and resource revisions are not currently listed as supported.
 
-Other executable revisions are rejected. Custom BGM and forced special states continue through the host's original logic. Offline tests cover playback, detours and resource generation; these do not establish compatibility with every game mode or replace listening tests in game. The transition follows the three-stem arrangement while retaining the host's volume updates; it is not an exact emulation of every IIDX 24 frame.
+Host selection uses the ten-digit game version, not a whole-DLL hash. It reads `prop/bootstrap.xml` release_code first, then runtime AVS ext if available, then `prop/ea3-config.xml` ext. This accommodates patched DLLs with the same supported audio layout. The plugin still validates audio entry points and call relationships; changing the version label does not make an incompatible executable supported.
+
+Other game versions are rejected. Custom BGM and forced special states continue through the host's original logic. Offline tests cover playback, detours and resource generation; these do not establish compatibility with every game mode or replace listening tests in game. The transition follows the three-stem arrangement while retaining the host's volume updates; it is not an exact emulation of every IIDX 24 frame.
 
 ## Install
 
@@ -146,7 +148,7 @@ smooth_transition=1
 
 The weekday is selected using the computer's local date and remains fixed until restart. Fade duration belongs to each profile's `[playback] transition_ms`, not the main INI. The default layered transition is 350 ms; the compatibility crossfade is 600 ms. Restart after configuration changes.
 
-A missing profile or asset triggers fallback. If controller validation fails, the plugin uses compatibility resources with original scheduling. If initialization cannot complete, installed hooks are rolled back. An unsupported executable hash leaves the plugin inactive.
+A missing profile or asset triggers fallback. If controller validation fails, the plugin uses compatibility resources with original scheduling. If initialization cannot complete, installed hooks are rolled back. An unsupported game version or incompatible audio-function layout leaves the plugin inactive.
 
 ## Upgrade and removal
 
@@ -156,9 +158,9 @@ To uninstall, remove the launch argument, then remove `modules/bgm_bridge.dll`, 
 
 ## Troubleshooting
 
-- **Original BGM still plays:** inspect `bgm_bridge.log`, confirm the `-k` argument and supported executable hash, and check that resource import completed.
+- **Original BGM still plays:** inspect `bgm_bridge.log`, confirm the `-k` argument and supported game version, and check that resource import completed.
 - **Importer cannot find a file:** for SINOBUZ choose IIDX 24's `data/sound/system/0`, with all seven days present. For Sparkle Shower choose IIDX 33's `data/sound/system`, including both variants. The target game's original system files are also required.
-- **Audio is too quiet or a transition sounds wrong:** report the weekday, profile, host hash, mode and a recording if possible. Include the generated `manifest.json` calibration values and relevant log lines; do not upload game audio files to an issue.
+- **Audio is too quiet or a transition sounds wrong:** report the weekday, profile, host version, mode and a recording if possible. Include the generated `manifest.json` calibration values and relevant log lines; do not upload game audio files to an issue.
 - **Need the old scheduling behavior:** set `smooth_transition=0` and restart.
 
 ## Development and releases

@@ -44,7 +44,7 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 | `src/plugin.cpp` | SDK 生命周期、INI、资源重定向和回退 |
 | `include/playback.hpp` | 与宿主无关的同步及音量渐变 |
 | `include/profile.hpp` | Profile 格式和校验 |
-| `hosts/adapter.hpp + hosts/builds.hpp` | 构建 hash、地址、状态映射和音频调用 |
+| `hosts/adapter.hpp + hosts/builds.hpp` | 游戏版本、地址、状态映射和音频调用 |
 | `profiles/` | BGM 资源映射和播放参数 |
 | `tools/` | 本地导入、编解码、测量、部署和无音频打包 |
 | `tests/` | 合成音频及播放/挂钩测试 |
@@ -59,7 +59,7 @@ python tools/deploy.py --game-root "D:\IIDX34" --asset-root "build\private-asset
 - `[levels]`：三轨及独立阶段策略需要 state0–state3，每行四个逗号分隔的有限数值，范围 0–127，未用声部必须为 0。槽位对应宿主适配器的默认 BGM 逻辑槽。SINOBUZ 将最终宿主状态映射为三轨，保持第 4 槽静音。
 - `[map]`：左侧相对 `/data/sound/system/`；右侧相对 resource_root，或为该系统资源目录下的绝对虚拟路径。不允许目录穿越及 Windows 文件系统路径。映射数量为 1–128。
 
-IIDX 33/34 共用适配器按程序 SHA-256 选择编译时地址表，受控策略要求三个默认循环路径，同步/混音渐变策略要求采样率 44.1 kHz、零起点、相同帧数和整段循环边界；独立阶段策略保留不同长度和非零循环起点。`original` 无需播放挂钩。相同三轨模型的编曲可以只新增 profile；分段衔接、更多声部或额外事件需要新策略，更换宿主构建需要验证地址及保护条件并增加适配器。
+IIDX 33/34 共用适配器按十位游戏版本号选择编译时地址表，受控策略要求三个默认循环路径，同步/混音渐变策略要求采样率 44.1 kHz、零起点、相同帧数和整段循环边界；独立阶段策略保留不同长度和非零循环起点。`original` 无需播放挂钩。相同三轨模型的编曲可以只新增 profile；分段衔接、更多声部或额外事件需要新策略，更换宿主构建需要验证地址及保护条件并增加适配器。
 
 ## 音频准备
 
@@ -81,13 +81,13 @@ IIDX 33/34 共用适配器按程序 SHA-256 选择编译时地址表，受控策
 
 `sparkle33` 使用 fixed/original 策略，在 IIDX 33 和 34 上保留两套原始音频变体，以及 l2 前奏和非零循环起点。导入时仅替换目标的循环次数、声像与声音 ID，保留来源增益、循环区间及压缩数据，不做三轨重混。指定 `--profile sparkle33 --source-root "D:\IIDX33\data\sound\system"` 生成资源，校验/部署也可使用 `--profile sparkle33`。无需同时导入 SINOBUZ 资源。
 
-`hosts/builds.hpp` 保存宿主地址和 hash，`tools/host_builds.json` 为工具提供相同构建列表；测试检查两者一致。33 代当前验证安装的 release code 为 2026081900。支持以列出的精确 hash 为准，修改属性文件版本号不会让其他 DLL 获得支持。
+`hosts/builds.hpp` 保存支持的版本和地址，`tools/host_builds.json` 为工具提供相同版本列表，测试检查两者一致。33 代 release code 为 2026081900，已验证的 34 代实际版本为 2026091700（仍接受此前列出的 2026091600，并执行同样的音频布局校验）。运行时优先使用 `prop/bootstrap.xml` 的 release_code，其次 Spice SDK AVS ext，最后 `prop/ea3-config.xml` 的 ext；离线工具依次读取 bootstrap、ea3。整份 DLL 的 hash 不再用于准入。两种路径均拒绝非法、重复或不支持的版本值以及非 LDJ 型号。运行时另行检查 PE 架构、可执行段、音频函数入口和调用目标；允许不影响这些位置的补丁，拒绝不兼容的音频布局修改。
 
-`build/host-image-tests.exe` 是可选私有测试工具，参数为宿主系列、游戏 DLL 和三个已生成 SINOBUZ 声部路径。它使用 DONT_RESOLVE_DLL_REFERENCES 映射 DLL，实际安装并还原播放挂钩，不解析游戏依赖、不执行入口或游戏函数。仅对已核对 hash 的本地 DLL 运行。不能替代游戏内测试。
+`build/host-image-tests.exe` 是可选私有测试工具，参数为宿主系列、游戏 DLL 和三个已生成 SINOBUZ 声部路径。它使用 DONT_RESOLVE_DLL_REFERENCES 映射 DLL，实际安装并还原播放挂钩，不解析游戏依赖、不执行入口或游戏函数。仅对版本和音频布局匹配的本地 DLL 运行。不能替代游戏内测试。
 
 ## IIDX 18–23 音频适配
 
-`tools/legacy_audio.py` 管理来源规则，宿主 hash 列表仍只有 33/34。18/19 SSP 表头为 72 字节，后接 250 组、每组 80 个 uint32 偏移。读取时检查表头、索引、条目边界、SD9 格式及声音 ID。默认选择组 14 子项 1，模式选择为子项 0；卡片进入为 18 代子项 11、19 代子项 8；确认音效为组 20 子项 0。这些索引来自对应程序的名称表核对，不依赖音频内容扫描猜测。
+`tools/legacy_audio.py` 管理来源规则，宿主版本 列表仍只有 33/34。18/19 SSP 表头为 72 字节，后接 250 组、每组 80 个 uint32 偏移。读取时检查表头、索引、条目边界、SD9 格式及声音 ID。默认选择组 14 子项 1，模式选择为子项 0；卡片进入为 18 代子项 11、19 代子项 8；确认音效为组 20 子项 0。这些索引来自对应程序的名称表核对，不依赖音频内容扫描猜测。
 
 18/19 的 `staged_tracks` 将 entry、mode、selection 作为独立曲目渐变，选曲从头播放，不做跨曲目相位同步；不要求三轨等长。保留源循环区间及压缩数据，按宿主参考响度校准阶段增益，检查采样峰值。该策略不允许无控制器的原生调度回退；不可用时保留宿主音频。旧来源没有单独退出音效映射，因此该音效不替换。
 
