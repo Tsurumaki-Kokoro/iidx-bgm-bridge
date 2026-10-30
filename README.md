@@ -73,18 +73,6 @@ A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 33 a
 
 The resource version identifies the tested source installation. The importer validates the required files and audio layout rather than enforcing that version string. Other game builds and resource revisions are not currently listed as supported.
 
-Supported `modules/bm2dx.dll` SHA-256 (IIDX 34):
-
-```text
-3755587f44785effe5008f74cfe7dccbdf423ad09feead48e00a90f78a42fe83
-```
-
-IIDX 33 SHA-256:
-
-```text
-073493c6cf06fa4f0d197c60f9ffb9d70bf1ec52828018f1c06bdc24a27bb795
-```
-
 Other executable revisions are rejected. Custom BGM and forced special states continue through the host's original logic. Offline tests cover playback, detours and resource generation; these do not establish compatibility with every game mode or replace listening tests in game. The transition follows the three-stem arrangement while retaining the host's volume updates; it is not an exact emulation of every IIDX 24 frame.
 
 ## Install
