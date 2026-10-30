@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(iidx_bgm_bridge VERSION 0.1.0 LANGUAGES C CXX)
+project(iidx_bgm_bridge VERSION 1.0.0 LANGUAGES C CXX)
 if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "Windows x64 with MSVC is required")
 endif()
