@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include "spicesdk.h"
-#include "host_iidx34.hpp"
+#include "../hosts/iidx34.hpp"
 
 static constexpr const char* kDays[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
 static bgm::Profile activeProfile;
@@ -38,7 +38,7 @@ static std::wstring wide(const std::string& text) {
 }
 static void logLine(const char* text, bool warning = false) {
     if (sdk.log) sdk.log(warning ? SPICE_SDK_LOG_LEVEL_WARNING : SPICE_SDK_LOG_LEVEL_INFO,
-                         "daily24", text);
+                         "bgm_bridge", text);
     OutputDebugStringA(text);
     if (logPath.empty()) return;
     AcquireSRWLockExclusive(&logLock);
@@ -219,16 +219,16 @@ static bool configure(HMODULE game) {
     slash = root.find_last_of(L"\\/");
     if (slash == std::wstring::npos) return false;
     root.resize(slash + 1);
-    logPath = root + L"daily24.log";
-    auto ini = root + L"modules\\daily24.ini";
-    if (!GetPrivateProfileIntW(L"daily24", L"enabled", 1, ini.c_str())) {
-        logLine("disabled by daily24.ini"); return false;
+    logPath = root + L"bgm_bridge.log";
+    auto ini = root + L"modules\\bgm_bridge.ini";
+    if (!GetPrivateProfileIntW(L"bgm_bridge", L"enabled", 1, ini.c_str())) {
+        logLine("disabled by bgm_bridge.ini"); return false;
     }
     if (fileHash(gamePath) != bgmhost::supported.sha256) {
         logLine("unsupported bm2dx.dll SHA256; no hooks installed", true); return false;
     }
     wchar_t value[32];
-    GetPrivateProfileStringW(L"daily24", L"weekday", L"auto", value, std::size(value), ini.c_str());
+    GetPrivateProfileStringW(L"bgm_bridge", L"weekday", L"auto", value, std::size(value), ini.c_str());
     SYSTEMTIME local; GetLocalTime(&local);
     unsigned day = local.wDayOfWeek;
     if (_wcsicmp(value, L"auto") != 0) {
@@ -236,15 +236,15 @@ static bool configure(HMODULE game) {
         for (unsigned i = 0; i < 7; ++i) if (_wcsicmp(value, wide(kDays[i]).c_str()) == 0) {
             day = i; found = true; break;
         }
-        if (!found) { logLine("invalid weekday in daily24.ini; expected auto/sun/mon/tue/wed/thu/fri/sat", true); return false; }
+        if (!found) { logLine("invalid weekday in bgm_bridge.ini; expected auto/sun/mon/tue/wed/thu/fri/sat", true); return false; }
     }
     wchar_t selected[80];
-    GetPrivateProfileStringW(L"daily24",L"profile",L"sinobuz24",selected,std::size(selected),ini.c_str());
+    GetPrivateProfileStringW(L"bgm_bridge",L"profile",L"sinobuz24",selected,std::size(selected),ini.c_str());
     std::string id; for (wchar_t ch : std::wstring(selected)) { if (ch > 127) throw std::runtime_error("non-ASCII profile ID"); id.push_back(static_cast<char>(ch)); }
     wchar_t fallback[80];
-    GetPrivateProfileStringW(L"daily24",L"fallback_profile",L"sinobuz24_compat",fallback,std::size(fallback),ini.c_str());
+    GetPrivateProfileStringW(L"bgm_bridge",L"fallback_profile",L"sinobuz24_compat",fallback,std::size(fallback),ini.c_str());
     std::string fallbackId; for (wchar_t ch : std::wstring(fallback)) { if (ch > 127) throw std::runtime_error("non-ASCII fallback ID"); fallbackId.push_back(static_cast<char>(ch)); }
-    bool controllerEnabled=GetPrivateProfileIntW(L"daily24",L"smooth_transition",1,ini.c_str())!=0;
+    bool controllerEnabled=GetPrivateProfileIntW(L"bgm_bridge",L"smooth_transition",1,ini.c_str())!=0;
     if(!controllerEnabled){id=fallbackId;}
     try {selectProfile(id,day);}
     catch(const std::exception& e){logLine(e.what(),true);if(id==fallbackId)throw;selectProfile(fallbackId,day);}

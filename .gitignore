@@ -3,6 +3,12 @@
 !/.gitignore
 !/.gitattributes
 !/README.md
+!/README.zh-CN.md
+!/LICENSE
+!/docs/
+!/hosts/
+!/.github/
+!/CMakeLists.txt
 !/THIRD_PARTY_NOTICES.md
 !/build.cmd
 !/src/
@@ -29,7 +35,7 @@
 *.ifs
 *.mp4
 *.local.*
-config/daily24.ini
+config/bgm_bridge.ini
 vendor/*
 !vendor/minhook/
 !vendor/spicesdk/
@@ -38,3 +44,8 @@ vendor/minhook/*
 !vendor/minhook/src/
 !vendor/minhook/LICENSE.txt
 !vendor/minhook/AUTHORS.txt
+
+*.spec
+*.zip
+.env
+.env.*

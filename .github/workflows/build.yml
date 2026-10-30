@@ -1,0 +1,60 @@
+name: Build and release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Build and test C++
+        shell: cmd
+        run: build.cmd
+      - name: Install packaging dependencies
+        run: python -m pip install -r tools/requirements.txt
+      - name: Test profiles and resource tooling without game files
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Package
+        env:
+          BUILD_REF: ${{ github.ref_name }}
+          BUILD_SHA: ${{ github.sha }}
+          BUILD_REF_TYPE: ${{ github.ref_type }}
+        run: |
+          $version = if ($env:BUILD_REF_TYPE -eq 'tag') { $env:BUILD_REF } else { 'dev-' + $env:BUILD_SHA.Substring(0, 8) }
+          python tools/package.py --version $version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/check_package.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: iidx-bgm-bridge-win64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: iidx-bgm-bridge-win64
+          path: dist
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --title "IIDX BGM Bridge $RELEASE_TAG" --generate-notes

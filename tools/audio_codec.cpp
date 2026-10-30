@@ -65,7 +65,18 @@ int wmain(int argc,wchar_t** argv) {
             auto out=convert(compressed,&pcm,input);write(argv[3],out);
             std::cout<<out.size()/pcm.nBlockAlign<<" frames\n";
         } else if(!wcscmp(argv[1],L"encode")&&argc==5) {
-            auto input=read(argv[3]);auto out=convert(&pcm,compressed,input);
+            auto input=read(argv[3]);
+            if(compressed->wFormatTag!=WAVE_FORMAT_ADPCM||compressed->cbSize<2)
+                throw std::runtime_error("MS ADPCM template required");
+            auto samples=reinterpret_cast<ADPCMWAVEFORMAT*>(compressed)->wSamplesPerBlock;
+            size_t block=static_cast<size_t>(samples)*pcm.nBlockAlign;
+            if(!block||input.size()%pcm.nBlockAlign)throw std::runtime_error("bad PCM frame alignment");
+            // ACM consumes whole ADPCM blocks. Loop/fact metadata keeps padding inaudible.
+            if(input.size()%block){
+                size_t previous=input.size();input.resize(previous+block-previous%block);
+                for(size_t i=previous;i<input.size();++i)input[i]=input[(i-previous)%previous];
+            }
+            auto out=convert(&pcm,compressed,input);
             Bytes result(b.begin(),b.begin()+dat+8);
             put(result,dat+4,static_cast<uint32_t>(out.size()));
             result.insert(result.end(),out.begin(),out.end());

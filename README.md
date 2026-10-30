@@ -1,62 +1,98 @@
-# IIDX 34 BGM profiles
+# IIDX BGM Bridge
 
-附加 DLL 形式的 BGM 插件。当前支持本机验证过的 IIDX 34 20260916 构建，主程序 SHA256 在 `include/host_iidx34.hpp` 中固定校验。通过现有 Spice SDK 加载机制使用，不修改原始游戏文件。
+[简体中文](README.zh-CN.md) · [Downloads](https://github.com/Tsurumaki-Kokoro/iidx-bgm-bridge/releases) · [Developer guide](docs/development.md)
 
-## 使用
+A Windows x64 Spice SDK plugin that brings profile-based system BGM to IIDX 34. The included SINOBUZ profile selects one of seven daily arrangements and keeps its three stems synchronized across menu transitions.
 
-安装后重启游戏即可。`modules/daily24.ini`：
+**No game executables or audio are included.** Generate runtime audio locally from your own IIDX 24 and supported IIDX 34 files. The importer does not download game data.
 
-```ini
-[daily24]
-enabled=1
-weekday=auto
-smooth_transition=1
-profile=sinobuz24
-fallback_profile=sinobuz24_compat
+## Features
+
+- Seven daily SINOBUZ arrangements, or a fixed weekday selection.
+- Continuous three-stem playback with configurable stage levels and fades.
+- Complete-mix compatibility profile for the original host scheduler.
+- Daily music-confirmation and card-out sounds, plus full mixes for alternate selection modes.
+- Separate resource directory; original game audio files remain intact.
+- Profile-driven resource mapping and a dedicated host adapter for future extensions.
+
+## Compatibility
+
+| Component | Requirement |
+| --- | --- |
+| OS | Windows x64 |
+| Host | IIDX 34 build identified as `iidx34-20260916` |
+| Loader | Spice2x with Spice SDK plugin support and the `-k` DLL option |
+| Audio input | Local IIDX 24 SINOBUZ `data/sound/system/0` directory and the supported IIDX 34 installation |
+| Python | Not required for the release ZIP; required when building from source |
+
+Supported `modules/bm2dx.dll` SHA-256:
+
+```text
+3755587f44785effe5008f74cfe7dccbdf423ad09feead48e00a90f78a42fe83
 ```
 
-`weekday` 可为 auto 或 sun/mon/tue/wed/thu/fri/sat，每次启动固定一次。配置示例在 `config/daily24.example.ini`。
+Other executable revisions are rejected. Custom BGM and forced special states continue through the host's original logic. Offline tests cover playback, detours and resource generation; these do not establish compatibility with every game mode or replace listening tests in game. The transition follows the three-stem arrangement while retaining IIDX 34's volume updates; it is not an exact emulation of every IIDX 24 frame.
 
-- `sinobuz24`：24 代七套原始三轨，模式选择至选曲保持播放位置，按阶段渐入声部。350ms 插值可在对应 profile 的 `transition_ms` 调整；34 代自身的音量更新仍存在，因此不是 24 代逐帧行为的完全复制。
-- `sinobuz24_compat`：使用原有完整混音资源和 600ms 衔接，作为兼容方案。
-- `smooth_transition=0`：选择兼容资源并交回原生调度。`enabled=0`：关闭插件。
+## Install
 
-主配置旧 `transition_ms` 已移至各 profile。非默认 BGM、特殊强制模式交由游戏处理。缺少主 profile 或资源时尝试 fallback；挂钩校验失败时选择兼容完整混音并使用原生调度；主程序 hash 不匹配时不安装挂钩。日志在游戏根目录 `daily24.log`。
+1. Close the game. Download and extract the Windows ZIP from [Releases](https://github.com/Tsurumaki-Kokoro/iidx-bgm-bridge/releases), then copy its contents into the IIDX 34 root directory. Do not use GitHub's source-code ZIP as the binary package.
+2. Copy `modules/bgm_bridge.example.ini` to `modules/bgm_bridge.ini`. Updates ship an example file so your existing configuration is not overwritten.
+3. Run `tools/import-resources.exe`. Enter your IIDX 24 `data/sound/system/0` path and IIDX 34 root path when prompted. Importing may take a while. All seven days are prepared and validated before the resource set is installed.
+4. Add `-k bgm_bridge.dll` to your existing Spice2x launch command, preserving its other options. For example, append that argument to the command you already use. The plugin DLL belongs in `modules/`.
+5. Start the game. Check `bgm_bridge.log` in the game root if the profile is not active.
 
-当前已完成离线音量、资源、同步逻辑和挂钩测试；真实游戏切屏听感需要运行游戏确认。
-
-## 架构与接入其他代目
-
-- `include/playback.hpp`：通用同步、阶段增益和渐变，不含游戏地址。
-- `profiles/*.ini`：资源映射、日程、声部数、阶段目标音量和策略。
-- `include/host_iidx34.hpp`：34 代地址、状态读取、音频调用与挂钩适配。
-- `src/plugin.cpp`：SDK 生命周期、配置、文件重定向和回退。
-
-新增普通三轨 BGM 通常只需新增 profile 和资源，沿用 `layered_sync`；完整混音可用 `crossfade_fullmix`，仅替换资源可用 `original`。`schedule=weekday` 用七天目录，`schedule=fixed` 配合 `fixed_variant=default` 用固定目录。资源根目录中的 `{day}` 会替换为当天或固定目录名。`layer_count` 支持 1–3；layered_sync 的 state0–state3 必须各有四个 0–127 数值，未用声部必须为 0。四个状态对应本机 34 代默认 BGM 控制器，当前 24 profile 将末状态映射为三轨齐奏，不叠加第四轨完整混音。
-
-`[map]` 左侧为相对 `/data/sound/system/` 的原始路径，右侧为相对 resource_root 或 `/data/sound/system/` 下绝对虚拟路径。禁止目录穿越。参考现有两个 profile；三轨必须有一致的采样率、长度和循环区间，当前适配器要求 44.1kHz、零起点循环。
-
-新代目若依赖分段接续、额外声部、独有事件或不同循环方式，仍须增加对应播放策略；换宿主程序版本则需新的 host adapter。profile 化不会自动复刻所有代目的特殊行为。
-
-## 构建和部署
-
-Windows x64，Visual Studio 2022 C++ 工具链；`build.cmd` 通过 vswhere 查找安装目录，也可设置 `VCVARS64`。运行：
+For unattended local importing:
 
 ```bat
-build.cmd
-python tools/prepare_sinobuz.py --source-root "原版24/data/sound/system/0" --game-root "游戏根目录"
-python tools/deploy.py --game-root "游戏根目录" --validate-only
-python tools/deploy.py --game-root "游戏根目录"
+tools\import-resources.exe --source-root "D:\IIDX24\data\sound\system\0" --game-root "D:\IIDX34"
 ```
 
-Python 资源工具需要 numpy；部署工具只使用标准库。不要以 Python -O 执行部署工具。部署前关闭游戏。工具先校验主程序、全部 profile 资源、三轨循环和 DLL 导出，再备份已有 DLL/配置并安装。构建产物位于 build/；构建会运行 C++ 测试，包括真实 MinHook 安装/还原测试。
+The generated files are placed under `data/sound/system/bgm_bridge/sinobuz24/`. Reimporting preserves the previous set in a sibling `sinobuz24.backup-*` directory. Use `--output-root` to generate a separate tree for inspection instead of installing the resources into the game directory. Close the game before importing.
 
-资源准备保持 SD9 压缩音频 payload 不变，使用 24 原始头部增益的有效权重，按 34 原版选曲声响度校准共同增益，并限制各阶段采样峰值留出余量。头部增益有量化，峰值限制也可能使个别日期低于参考；每一天的实测结果在生成资源的 manifest.json 中，不能把离线 LUFS 等同于实机最终响度。
+## Configuration
 
-**当前安装迁移的前提**：已有 `data/sound/system/daily24/` 的 v4 完整混音、模式预览、选定音效等资源仍供两个 profile 共用。prepare_sinobuz 只生成新的 42 个原始声部资源，不重建历史 v4 资源。新克隆必须从自己的既有安装保留该资源目录；deploy 会检查缺失项并停止。游戏资源及音频不随源码分发。
+Edit `modules/bgm_bridge.ini`:
 
-## 版本管理
+```ini
+[bgm_bridge]
+enabled=1
+profile=sinobuz24
+fallback_profile=sinobuz24_compat
+weekday=auto
+smooth_transition=1
+```
 
-Git 只收录源码、配置模板、profile、必要工具、测试、构建脚本及第三方许可。历史研究文档、旧脚本、反汇编、视频、音频资源、备份、日志和 build/work 输出仍保留在本地，但由 .gitignore 排除。新增顶层维护目录时需相应更新白名单。
+| Setting | Values / behavior |
+| --- | --- |
+| `enabled` | `0` disables the plugin; `1` enables it |
+| `profile` | `sinobuz24` for synchronized stems; `sinobuz24_compat` for complete mixes |
+| `fallback_profile` | Profile selected if the requested profile or its assets cannot load |
+| `weekday` | `auto`, `sun`, `mon`, `tue`, `wed`, `thu`, `fri`, `sat` |
+| `smooth_transition` | `1` enables the selected controller; `0` selects fallback assets with original host scheduling |
 
-更新前 v5 的源码和 DLL/配置保存在 `backups/before-framework-v6/`，部署工具也会按时间备份。回退时关闭游戏，恢复备份中的 DLL 和 INI 即可；旧资源未被替换。
+The weekday is selected using the computer's local date and remains fixed until restart. Fade duration belongs to each profile's `[playback] transition_ms`, not the main INI. The default layered transition is 350 ms; the compatibility crossfade is 600 ms. Restart after configuration changes.
+
+A missing profile or asset triggers fallback. If controller validation fails, the plugin uses compatibility resources with original scheduling. If initialization cannot complete, installed hooks are rolled back. An unsupported executable hash leaves the plugin inactive.
+
+## Upgrade, migration and removal
+
+For updates, close the game, replace the DLL/tools/profiles, and keep your existing `bgm_bridge.ini`. Rerun the importer when resource generation or profile paths change. Keep the previous package if you need a rollback.
+
+When migrating from `daily24`, remove `-k daily24.dll` from the launcher before adding `-k bgm_bridge.dll`; do not load both plugins. The new importer builds its own complete resource set and does not require the old `daily24` resource directory. Copy any preferred weekday setting into the new INI. After confirming the migration, old plugin files can be removed separately.
+
+To uninstall, remove the launch argument, then remove `modules/bgm_bridge.dll`, its INI/example, the two included profiles and the generated `data/sound/system/bgm_bridge/sinobuz24` directory. Remove importer tools only if no other installation needs them. Original game audio is not modified by this project.
+
+## Troubleshooting
+
+- **Original BGM still plays:** inspect `bgm_bridge.log`, confirm the `-k` argument and supported executable hash, and check that resource import completed.
+- **Importer cannot find a file:** choose IIDX 24's `data/sound/system/0`, not its game root. All seven sets of stems, card-out sounds and music-confirmation sounds are required. IIDX 34's original system files are also required.
+- **Audio is too quiet or a transition sounds wrong:** report the weekday, profile, host hash, mode and a recording if possible. Include the generated `manifest.json` calibration values and relevant log lines; do not upload game audio files to an issue.
+- **Need the old scheduling behavior:** set `smooth_transition=0` and restart.
+
+## Development and releases
+
+See the [English developer guide](docs/development.md) or [中文开发指南](docs/development.zh-CN.md) for builds, tests, profile schema, resource calibration and release automation. Pull requests should update both language versions when changing documented behavior. Game files, local configuration, generated audio, logs and research workspaces are excluded from version control and release packaging.
+
+## License
+
+Project code is distributed under [GPL-3.0-only](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) and the licenses bundled with releases. Game data remains separately supplied and is not covered by this project's license. This is an independent project, not affiliated with or endorsed by KONAMI.

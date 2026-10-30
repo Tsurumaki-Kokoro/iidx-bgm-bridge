@@ -3,7 +3,7 @@
 #include <memory>
 #include <cstdio>
 #include <cstring>
-#include "playback.hpp"
+#include "../include/playback.hpp"
 #include "../vendor/minhook/include/MinHook.h"
 
 namespace bgmhost {
